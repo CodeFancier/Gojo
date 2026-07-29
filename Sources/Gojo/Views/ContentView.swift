@@ -4,9 +4,9 @@ struct ContentView: View {
     @EnvironmentObject var state: AppState
     var body: some View {
         NavigationSplitView {
-            Text("侧边栏占位").frame(minWidth: 220)
+            SidebarView()
         } detail: {
-            Text("详情占位")
+            DetailView()
         }
         .alert("操作失败", isPresented: Binding(
             get: { state.errorMessage != nil },
