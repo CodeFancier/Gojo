@@ -2,7 +2,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-SVG="Gojo-Logo-Assets/gojo-logo-concept.svg"
+# 全尺寸主图；16/32/64px 使用光学优化的小尺寸源以获得更清晰的剪影
+SVG_FULL="Gojo-Logo-Assets/gojo-logo.svg"
+SVG_SMALL="Gojo-Logo-Assets/gojo-logo-small.svg"
 OUT="Sources/Gojo/Resources/Gojo.icns"
 ICONSET="$(mktemp -d)/Gojo.iconset"
 
@@ -10,8 +12,18 @@ command -v rsvg-convert >/dev/null 2>&1 || { echo "需要 rsvg-convert（brew in
 command -v iconutil >/dev/null 2>&1 || { echo "需要 iconutil"; exit 1; }
 
 mkdir -p "$ICONSET"
-for size in 16 32 64 128 256 512 1024; do
-  rsvg-convert -w "$size" -h "$size" "$SVG" -o "$ICONSET/tmp_$size.png"
+
+render() { # render <size> <svg>
+  rsvg-convert -w "$1" -h "$1" "$2" -o "$ICONSET/tmp_$1.png"
+}
+
+# 小尺寸：光学优化源
+for size in 16 32 64; do
+  render "$size" "$SVG_SMALL"
+done
+# 大尺寸：完整主图
+for size in 128 256 512 1024; do
+  render "$size" "$SVG_FULL"
 done
 
 cp "$ICONSET/tmp_16.png"   "$ICONSET/icon_16x16.png"

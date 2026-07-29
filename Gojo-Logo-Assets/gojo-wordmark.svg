@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="512" viewBox="0 0 1600 512" role="img" aria-labelledby="title desc">
+  <title id="title">Gojo horizontal logo</title>
+  <desc id="desc">The Gojo app icon with a custom geometric Gojo wordmark.</desc>
+  <defs>
+    <linearGradient id="bg" x1="56" y1="28" x2="472" y2="492" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#292E38"/>
+      <stop offset="0.5" stop-color="#151922"/>
+      <stop offset="1" stop-color="#090B10"/>
+    </linearGradient>
+    <radialGradient id="core" cx="42%" cy="34%" r="72%">
+      <stop offset="0" stop-color="#F2FBFF"/>
+      <stop offset="0.16" stop-color="#BDEBFF"/>
+      <stop offset="0.42" stop-color="#49B9FF"/>
+      <stop offset="0.72" stop-color="#147EE8"/>
+      <stop offset="1" stop-color="#0749AE"/>
+    </radialGradient>
+    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
+      <feGaussianBlur stdDeviation="18"/>
+    </filter>
+  </defs>
+
+  <rect x="24" y="24" width="464" height="464" rx="104" fill="url(#bg)"/>
+  <rect x="26" y="26" width="460" height="460" rx="102" fill="none" stroke="#FFFFFF" stroke-opacity="0.13" stroke-width="3"/>
+  <circle cx="256" cy="256" r="74" fill="#168BFF" opacity="0.28" filter="url(#glow)"/>
+  <path d="M367 170 A146 146 0 1 0 376 332 L376 280 L304 280"
+        fill="none" stroke="#FFFFFF" stroke-width="38"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="256" cy="256" r="51" fill="url(#core)" stroke="#B8E9FF" stroke-opacity="0.72" stroke-width="2"/>
+
+  <g fill="none" stroke="#111318" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M824 161 A128 128 0 1 0 831 344 L831 276 L752 276"/>
+    <circle cx="1016" cy="286" r="88"/>
+    <path d="M1178 198 L1178 350 C1178 397 1152 421 1110 421"/>
+    <circle cx="1178" cy="116" r="22" fill="#111318" stroke="none"/>
+    <circle cx="1390" cy="286" r="88"/>
+  </g>
+</svg>

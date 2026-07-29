@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="512" viewBox="0 0 1600 512" role="img" aria-labelledby="title desc">
+  <title id="title">Gojo monochrome horizontal logo</title>
+  <desc id="desc">The monochrome Gojo icon with a custom outlined wordmark.</desc>
+  <rect x="24" y="24" width="464" height="464" rx="104" fill="#111318"/>
+  <path d="M367 170 A146 146 0 1 0 376 332 L376 280 L304 280"
+        fill="none" stroke="#FFFFFF" stroke-width="38"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="256" cy="256" r="51" fill="#FFFFFF"/>
+  <g fill="none" stroke="#111318" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M824 161 A128 128 0 1 0 831 344 L831 276 L752 276"/>
+    <circle cx="1016" cy="286" r="88"/>
+    <path d="M1178 198 L1178 350 C1178 397 1152 421 1110 421"/>
+    <circle cx="1178" cy="116" r="22" fill="#111318" stroke="none"/>
+    <circle cx="1390" cy="286" r="88"/>
+  </g>
+</svg>
