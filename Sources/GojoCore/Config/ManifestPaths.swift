@@ -7,7 +7,7 @@ public enum ManifestPaths {
     public static func workspaceManifest(in root: URL) -> URL {
         gojoDir(in: root).appendingPathComponent("workspace.json")
     }
-    public static func projectManifest(in root: URL) -> URL {
-        gojoDir(in: root).appendingPathComponent("project.json")
+    public static func publicSpaceManifest(in root: URL) -> URL {
+        gojoDir(in: root).appendingPathComponent("public.json")
     }
 }

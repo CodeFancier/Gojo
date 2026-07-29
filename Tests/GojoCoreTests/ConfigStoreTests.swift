@@ -5,7 +5,7 @@ final class ConfigStoreTests: XCTestCase {
     func testIndexRoundTrip() throws {
         let base = try TestSupport.makeTempDir()
         let store = ConfigStore(baseDirectory: base)
-        var index = store.loadIndex()          // 缺省文件 → 空索引
+        var index = store.loadIndex()
         XCTAssertNil(index.publicSpacePath)
 
         index.publicSpacePath = "/tmp/public"
@@ -13,25 +13,30 @@ final class ConfigStoreTests: XCTestCase {
         index.terminalPreference = .iterm2
         try store.saveIndex(index)
 
-        let reloaded = ConfigStore(baseDirectory: base).loadIndex()
-        XCTAssertEqual(reloaded, index)
+        XCTAssertEqual(ConfigStore(baseDirectory: base).loadIndex(), index)
+    }
+
+    func testPublicSpaceManifestRoundTrip() throws {
+        let space = try TestSupport.makeTempDir()
+        let store = ConfigStore(baseDirectory: try TestSupport.makeTempDir())
+        XCTAssertNil(try store.loadPublicSpace(at: space))
+
+        let manifest = PublicSpaceManifest(projects: [
+            PublicProject(name: "lib", url: "git@x:lib.git", cloned: false)
+        ])
+        try store.savePublicSpace(manifest, at: space)
+        XCTAssertEqual(try store.loadPublicSpace(at: space), manifest)
     }
 
     func testWorkspaceManifestRoundTrip() throws {
         let ws = try TestSupport.makeTempDir()
         let store = ConfigStore(baseDirectory: try TestSupport.makeTempDir())
-        XCTAssertNil(try store.loadWorkspace(at: ws))   // 尚不存在
+        XCTAssertNil(try store.loadWorkspace(at: ws))
 
-        let manifest = WorkspaceManifest(name: "电商中台", projectDirectories: ["订单"])
+        let manifest = WorkspaceManifest(name: "电商中台", members: [
+            WorkspaceMember(folderName: "lib", publicProjectId: UUID(), mode: .symlink)
+        ])
         try store.saveWorkspace(manifest, at: ws)
         XCTAssertEqual(try store.loadWorkspace(at: ws), manifest)
-    }
-
-    func testProjectManifestRoundTrip() throws {
-        let proj = try TestSupport.makeTempDir()
-        let store = ConfigStore(baseDirectory: try TestSupport.makeTempDir())
-        let manifest = ProjectManifest(name: "订单服务")
-        try store.saveProject(manifest, at: proj)
-        XCTAssertEqual(try store.loadProject(at: proj), manifest)
     }
 }

@@ -40,19 +40,19 @@ public struct ConfigStore {
         try write(index, to: indexURL)
     }
 
+    // 公共空间清单
+    public func loadPublicSpace(at root: URL) throws -> PublicSpaceManifest? {
+        try read(PublicSpaceManifest.self, from: ManifestPaths.publicSpaceManifest(in: root))
+    }
+    public func savePublicSpace(_ manifest: PublicSpaceManifest, at root: URL) throws {
+        try write(manifest, to: ManifestPaths.publicSpaceManifest(in: root))
+    }
+
     // 编码空间清单
     public func loadWorkspace(at root: URL) throws -> WorkspaceManifest? {
         try read(WorkspaceManifest.self, from: ManifestPaths.workspaceManifest(in: root))
     }
     public func saveWorkspace(_ manifest: WorkspaceManifest, at root: URL) throws {
         try write(manifest, to: ManifestPaths.workspaceManifest(in: root))
-    }
-
-    // 开发项目清单
-    public func loadProject(at root: URL) throws -> ProjectManifest? {
-        try read(ProjectManifest.self, from: ManifestPaths.projectManifest(in: root))
-    }
-    public func saveProject(_ manifest: ProjectManifest, at root: URL) throws {
-        try write(manifest, to: ManifestPaths.projectManifest(in: root))
     }
 }
