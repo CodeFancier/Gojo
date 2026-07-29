@@ -3,125 +3,158 @@ import GojoCore
 
 struct DetailView: View {
     @EnvironmentObject var state: AppState
-    @State private var showClone = false
-    @State private var cloneURL = ""
-    @State private var cloneSubdir = ""
-    @State private var showAddSymlink = false
-    @State private var symlinkPublicRepo = ""
-    @State private var symlinkLinkName = ""
-    @State private var showCreateProject = false
-    @State private var newProjectName = ""
-    @State private var branchSheetRepo: String?
+
+    // 新增公共项目
+    @State private var showAddProject = false
+    @State private var newName = ""
+    @State private var newURL = ""
+
+    // 切分支
+    @State private var branchTarget: String?
     @State private var branchOptions: [String] = []
+
+    // Git→软链接破坏性确认
+    @State private var confirmSymlinkFolder: String?
 
     var body: some View {
         switch state.selection {
         case .publicSpace, .none:
-            List(state.publicRepos, id: \.self) { Text($0.lastPathComponent) }
-                .navigationTitle("公共空间")
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button("克隆仓库") { showClone = true }
-                    }
-                }
-                .alert("克隆 Git 仓库", isPresented: $showClone) {
-                    TextField("Git URL", text: $cloneURL)
-                    Button("克隆") {
-                        state.addPublicRepo(url: cloneURL)
-                        cloneURL = ""
-                    }
-                    Button("取消", role: .cancel) {}
-                }
+            publicSpaceView
         case .codingSpace(let space):
-            List(state.devProjects(in: space), id: \.self) { Text($0.lastPathComponent) }
-                .navigationTitle(space.lastPathComponent)
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            Button("新建开发项目") { showCreateProject = true }
-                            Button("指认已存在") { state.adoptExistingProject(in: space) }
-                        } label: {
-                            Image(systemName: "plus")
+            codingSpaceView(space)
+        }
+    }
+
+    // MARK: 公共空间详情
+    private var publicSpaceView: some View {
+        List {
+            ForEach(state.publicProjects) { proj in
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text(proj.name)
+                        Text(proj.url).font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    if proj.cloned {
+                        Label("已克隆", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green).labelStyle(.iconOnly)
+                    } else {
+                        Button("Clone") { state.clonePublicProject(proj.id) }
+                    }
+                }
+            }
+        }
+        .navigationTitle("公共空间")
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showAddProject = true } label: { Image(systemName: "plus") }
+            }
+        }
+        .alert("新增公共项目", isPresented: $showAddProject) {
+            TextField("名称", text: $newName)
+            TextField("Git URL", text: $newURL)
+            Button("添加") {
+                state.addPublicProject(name: newName, url: newURL)
+                newName = ""; newURL = ""
+            }
+            Button("取消", role: .cancel) {}
+        } message: { Text("只登记定义，点 Clone 才同步下来") }
+    }
+
+    // MARK: 编码空间详情
+    private func codingSpaceView(_ space: URL) -> some View {
+        List {
+            Section("成员仓库") {
+                ForEach(state.members(in: space)) { member in
+                    memberRow(space, member)
+                }
+            }
+        }
+        .navigationTitle(space.lastPathComponent)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    ForEach(state.publicProjects) { proj in
+                        Menu(proj.name) {
+                            Button("Git 模式") {
+                                state.addPublicToSpace(space, projectId: proj.id, mode: .git)
+                            }
+                            Button("软链接模式") {
+                                state.addPublicToSpace(space, projectId: proj.id, mode: .symlink)
+                            }
                         }
                     }
-                }
-                .alert("新建开发项目", isPresented: $showCreateProject) {
-                    TextField("项目名称", text: $newProjectName)
-                    Button("创建") {
-                        state.createDevProject(named: newProjectName, in: space)
-                        newProjectName = ""
-                    }
-                    Button("取消", role: .cancel) {}
-                }
-        case .devProject(_, let project):
-            let m = state.projectManifest(at: project)
-            List {
-                Section("Git 仓库") {
-                    ForEach(m?.repos ?? []) { repo in
-                        HStack {
-                            Text(repo.subdirectory)
-                            Spacer()
-                            Text(repo.branch ?? "-").foregroundStyle(.secondary)
-                            Button("同步") {
-                                state.syncRepo(project, subdir: repo.subdirectory)
-                            }
-                            Button("切换分支") {
-                                branchSheetRepo = repo.subdirectory
-                                branchOptions = state.branches(for: project, subdir: repo.subdirectory)
-                            }
-                            .confirmationDialog("选择分支", isPresented: .constant(branchSheetRepo == repo.subdirectory), presenting: branchOptions) { branches in
-                                ForEach(branches, id: \.self) { branch in
-                                    Button(branch) {
-                                        state.setBranch(project, subdir: repo.subdirectory, branch: branch)
-                                        branchSheetRepo = nil
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                Section("软链接") {
-                    ForEach(m?.symlinks ?? []) { link in
-                        Text("\(link.linkPath) → \(link.publicRepoName)")
-                    }
+                } label: { Image(systemName: "plus") }
+            }
+        }
+        .confirmationDialog("选择分支", isPresented: Binding(
+            get: { branchTarget != nil },
+            set: { if !$0 { branchTarget = nil } }), presenting: branchOptions) { branches in
+            ForEach(branches, id: \.self) { b in
+                Button(b) {
+                    if let f = branchTarget { state.setBranch(space, folderName: f, branch: b) }
+                    branchTarget = nil
                 }
             }
-            .navigationTitle(project.lastPathComponent)
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) {
-                    Menu {
-                        Button("克隆仓库") { showClone = true }
-                        Button("软链接公共库") { showAddSymlink = true }
-                    } label: {
-                        Image(systemName: "plus")
-                    }
+        }
+        .alert("切回软链接会丢失本地改动", isPresented: Binding(
+            get: { confirmSymlinkFolder != nil },
+            set: { if !$0 { confirmSymlinkFolder = nil } })) {
+            Button("仍然切换", role: .destructive) {
+                if let f = confirmSymlinkFolder { state.switchToSymlink(space, folderName: f) }
+                confirmSymlinkFolder = nil
+            }
+            Button("取消", role: .cancel) { confirmSymlinkFolder = nil }
+        } message: { Text("该成员的本地 clone 有未提交或未推送的改动，切回软链接将删除它们。") }
+    }
+
+    @ViewBuilder
+    private func memberRow(_ space: URL, _ member: ScannedMember) -> some View {
+        HStack {
+            Image(systemName: icon(for: member.form))
+            Text(member.folderName)
+            Spacer()
+            if let b = member.branch {
+                Text(b).font(.caption).foregroundStyle(.secondary)
+            }
+            // git 成员：同步 + 切分支
+            if isGit(member.form) {
+                Button("同步") { state.syncMember(space, folderName: member.folderName) }
+                Button("分支") {
+                    branchTarget = member.folderName
+                    branchOptions = state.branches(space, folderName: member.folderName)
                 }
             }
-            .alert("克隆 Git 仓库", isPresented: $showClone) {
-                TextField("Git URL", text: $cloneURL)
-                TextField("子目录名", text: $cloneSubdir)
-                Button("克隆") {
-                    if case .devProject(_, let project) = state.selection {
-                        state.addRepoToProject(project, url: cloneURL, subdir: cloneSubdir)
+            // 模式切换（仅公共项目成员）
+            switch member.form {
+            case .publicSymlink:
+                Button("转 Git") { state.switchToGit(space, folderName: member.folderName) }
+            case .publicGit:
+                Button("转软链接") {
+                    if state.memberHasLocalChanges(space, folderName: member.folderName) {
+                        confirmSymlinkFolder = member.folderName
+                    } else {
+                        state.switchToSymlink(space, folderName: member.folderName)
                     }
-                    cloneURL = ""
-                    cloneSubdir = ""
                 }
-                Button("取消", role: .cancel) {}
-            }
-            .alert("软链接公共库", isPresented: $showAddSymlink) {
-                TextField("公共库名", text: $symlinkPublicRepo)
-                TextField("链接名", text: $symlinkLinkName)
-                Button("创建") {
-                    if case .devProject(_, let project) = state.selection {
-                        state.addSymlinkToProject(project, publicRepo: symlinkPublicRepo, linkName: symlinkLinkName)
-                    }
-                    symlinkPublicRepo = ""
-                    symlinkLinkName = ""
-                }
-                Button("取消", role: .cancel) {}
+            case .standalone:
+                EmptyView()
             }
         }
     }
-}
 
+    private func isGit(_ form: MemberForm) -> Bool {
+        switch form {
+        case .standalone, .publicGit: return true
+        case .publicSymlink: return false
+        }
+    }
+
+    private func icon(for form: MemberForm) -> String {
+        switch form {
+        case .standalone:    return "shippingbox"
+        case .publicGit:     return "arrow.triangle.branch"
+        case .publicSymlink: return "link"
+        }
+    }
+}
