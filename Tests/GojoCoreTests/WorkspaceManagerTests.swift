@@ -41,4 +41,64 @@ final class WorkspaceManagerTests: XCTestCase {
         let projects = try mgr.publicProjects()
         XCTAssertTrue(projects.contains { $0.name == "manual" && $0.cloned })
     }
+
+    // MARK: - 编码空间成员扫描
+
+    func testScanIdentifiesStandaloneAndBranch() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+        // 手动往编码空间丢一个独立仓库
+        let source = try TestSupport.makeLocalGitRepo(named: "s", in: sandbox)
+        try GitService().clone(url: source.path, into: ws.appendingPathComponent("solo"))
+
+        let members = try mgr.scanMembers(in: ws)
+        XCTAssertEqual(members.count, 1)
+        XCTAssertEqual(members[0].folderName, "solo")
+        XCTAssertEqual(members[0].form, .standalone)
+        XCTAssertEqual(members[0].branch, "main")     // 实时读分支
+    }
+
+    func testScanIdentifiesPublicGitMember() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
+        try mgr.addPublicProject(name: "lib", url: source.path)
+        let id = try mgr.publicProjects().first { $0.name == "lib" }!.id
+
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+        try mgr.addPublicProjectToSpace(projectId: id, mode: .git, in: ws)
+
+        let members = try mgr.scanMembers(in: ws)
+        XCTAssertEqual(members.count, 1)
+        XCTAssertEqual(members[0].form, .publicGit(id))
+    }
+
+    func testScanIdentifiesPublicSymlinkMember() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
+        try mgr.addPublicProject(name: "lib", url: source.path)
+        let id = try mgr.publicProjects().first { $0.name == "lib" }!.id
+        try mgr.clonePublicProject(id: id)             // 软链接要求先克隆
+
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+        try mgr.addPublicProjectToSpace(projectId: id, mode: .symlink, in: ws)
+
+        let members = try mgr.scanMembers(in: ws)
+        XCTAssertEqual(members.count, 1)
+        XCTAssertEqual(members[0].form, .publicSymlink(id))
+    }
+
+    func testSymlinkModeRequiresClonedPublic() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        try mgr.addPublicProject(name: "lib", url: "git@x:lib.git")   // 未克隆
+        let id = try mgr.publicProjects().first { $0.name == "lib" }!.id
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+
+        XCTAssertThrowsError(try mgr.addPublicProjectToSpace(projectId: id, mode: .symlink, in: ws)) {
+            XCTAssertEqual($0 as? WorkspaceError, .publicProjectNotCloned("lib"))
+        }
+    }
 }
