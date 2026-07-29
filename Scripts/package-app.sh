@@ -11,6 +11,12 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/Gojo"
 cp Sources/Gojo/Resources/Info.plist "$APP/Contents/Info.plist"
 
+# 应用图标：若缺失则从 SVG 生成
+if [ ! -f Sources/Gojo/Resources/Gojo.icns ]; then
+  ./Scripts/make-icon.sh
+fi
+cp Sources/Gojo/Resources/Gojo.icns "$APP/Contents/Resources/Gojo.icns"
+
 # 本地自签名，便于首次右键"打开"运行
 codesign --force --deep --sign - "$APP"
 echo "已生成 $APP"
