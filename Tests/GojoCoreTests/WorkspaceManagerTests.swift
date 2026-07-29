@@ -154,4 +154,29 @@ final class WorkspaceManagerTests: XCTestCase {
             XCTAssertEqual($0 as? WorkspaceError, .notASymlinkMember("lib"))
         }
     }
+
+    // MARK: - 扁平成员分支/同步
+
+    func testBranchListAndCheckoutOnMember() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
+        _ = try ShellRunner().run("git", ["branch", "feature"], cwd: source)
+
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+        try GitService().clone(url: source.path, into: ws.appendingPathComponent("lib"))
+
+        XCTAssertTrue(try mgr.listBranches(folderName: "lib", in: ws).contains("feature"))
+        try mgr.setBranch("feature", folderName: "lib", in: ws)
+        XCTAssertEqual(try mgr.scanMembers(in: ws).first?.branch, "feature")
+    }
+
+    func testSyncMemberDoesNotThrow() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+        try GitService().clone(url: source.path, into: ws.appendingPathComponent("lib"))
+        XCTAssertNoThrow(try mgr.syncMember(folderName: "lib", in: ws))
+    }
 }
