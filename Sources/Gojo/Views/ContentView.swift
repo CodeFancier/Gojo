@@ -8,6 +8,7 @@ struct ContentView: View {
         } detail: {
             DetailView()
         }
+        .toolbar { ToolbarItemGroup(placement: .primaryAction) { ToolbarButtons() } }
         .alert("操作失败", isPresented: Binding(
             get: { state.errorMessage != nil },
             set: { if !$0 { state.errorMessage = nil } })) {
@@ -15,3 +16,4 @@ struct ContentView: View {
         } message: { Text(state.errorMessage ?? "") }
     }
 }
+
