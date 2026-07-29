@@ -31,7 +31,13 @@ final class GitServiceTests: XCTestCase {
         try git.clone(url: source.path, into: dest)
 
         XCTAssertEqual(try git.currentBranch(at: dest), "main")
-        XCTAssertTrue(try git.listBranches(at: dest).contains("feature"))
+
+        let branches = try git.listBranches(at: dest)
+        // Verify no duplicates: deduplicated length equals original length
+        let deduped = Array(Set(branches))
+        XCTAssertEqual(branches.count, deduped.count, "Branch list should have no duplicates")
+        XCTAssertTrue(branches.contains("main"), "Should contain 'main' branch")
+        XCTAssertTrue(branches.contains("feature"), "Should contain 'feature' branch")
 
         try git.checkout(branch: "feature", at: dest)
         XCTAssertEqual(try git.currentBranch(at: dest), "feature")

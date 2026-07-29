@@ -25,17 +25,31 @@ public struct GitService {
 
     public func listBranches(at repo: URL) throws -> [String] {
         let out = try git(["branch", "--all", "--format=%(refname:short)"], at: repo)
-        return out.split(separator: "\n")
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-            .map { branch in
-                // Strip "origin/" prefix from remote-tracking branches for consistency
-                if branch.hasPrefix("origin/") {
-                    return String(branch.dropFirst(7))
-                }
-                return branch
+        var seen = Set<String>()
+        var result: [String] = []
+
+        for line in out.split(separator: "\n") {
+            var branch = line.trimmingCharacters(in: .whitespaces)
+            guard !branch.isEmpty else { continue }
+
+            // Skip symbolic refs like "origin/HEAD -> origin/main"
+            if branch.contains("->") {
+                continue
             }
-            .filter { $0 != "HEAD" }  // Filter out symbolic refs
+
+            // Strip "origin/" prefix from remote-tracking branches for consistency
+            if branch.hasPrefix("origin/") {
+                branch = String(branch.dropFirst(7))
+            }
+
+            // Add only if not seen before (order-preserving deduplication)
+            if !seen.contains(branch) {
+                seen.insert(branch)
+                result.append(branch)
+            }
+        }
+
+        return result
     }
 
     public func checkout(branch: String, at repo: URL) throws {
