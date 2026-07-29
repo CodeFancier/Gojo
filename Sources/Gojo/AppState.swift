@@ -91,4 +91,29 @@ final class AppState: ObservableObject {
         guard let url = pickFolder(message: "选择/新建编码空间文件夹") else { return }
         run { try manager.createCodingSpace(name: url.lastPathComponent, at: url) }
     }
+
+    func createDevProject(named name: String, in space: URL) {
+        run { _ = try manager.createDevProject(name: name, in: space, existingFolder: nil) }
+    }
+
+    func adoptExistingProject(in space: URL) {
+        guard let folder = pickFolder(message: "指认已存在文件夹为开发项目") else { return }
+        run { _ = try manager.createDevProject(name: folder.lastPathComponent, in: space, existingFolder: folder) }
+    }
+
+    func addRepoToProject(_ project: URL, url: String, subdir: String) {
+        run { try manager.addRepo(url: url, subdirectory: subdir, to: project) }
+    }
+
+    func addSymlinkToProject(_ project: URL, publicRepo: String, linkName: String) {
+        run { try manager.addSymlink(publicRepoName: publicRepo, linkName: linkName, in: project) }
+    }
+
+    func syncRepo(_ project: URL, subdir: String) {
+        run { try manager.syncRepo(subdir: subdir, in: project) }
+    }
+
+    func setBranch(_ project: URL, subdir: String, branch: String) {
+        run { try manager.setBranch(branch, repoSubdir: subdir, in: project) }
+    }
 }
