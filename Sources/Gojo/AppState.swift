@@ -116,4 +116,8 @@ final class AppState: ObservableObject {
     func setBranch(_ project: URL, subdir: String, branch: String) {
         run { try manager.setBranch(branch, repoSubdir: subdir, in: project) }
     }
+
+    func branches(for project: URL, subdir: String) -> [String] {
+        (try? manager.listBranches(repoSubdir: subdir, in: project)) ?? []
+    }
 }

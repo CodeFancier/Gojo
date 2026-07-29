@@ -20,6 +20,36 @@ final class WorkspaceManagerTests: XCTestCase {
         XCTAssertEqual(repos.map { $0.lastPathComponent }, ["lib"])
     }
 
+    func testAdoptExistingProjectPreservesManifest() throws {
+        let sandbox = try TestSupport.makeTempDir()
+        let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
+        let base = try TestSupport.makeTempDir()
+        let mgr = makeManager(base: base)
+
+        // Create a coding space
+        let wsRoot = sandbox.appendingPathComponent("workspace")
+        try mgr.createCodingSpace(name: "workspace", at: wsRoot)
+
+        // Create an existing folder with a pre-existing manifest
+        let existingFolder = wsRoot.appendingPathComponent("existing-project")
+        try FileManager.default.createDirectory(at: existingFolder, withIntermediateDirectories: true)
+
+        let preExistingManifest = ProjectManifest(
+            name: "existing-project",
+            repos: [GitRepoBinding(url: source.path, subdirectory: "lib-existing", branch: "main")],
+            symlinks: []
+        )
+        try ConfigStore(baseDirectory: base).saveProject(preExistingManifest, at: existingFolder)
+
+        // Adopt the existing folder (should preserve the manifest)
+        _ = try mgr.createDevProject(name: "existing-project", in: wsRoot, existingFolder: existingFolder)
+
+        // Load the manifest and verify it still has the pre-existing repo
+        let manifest = try ConfigStore(baseDirectory: base).loadProject(at: existingFolder)
+        XCTAssertEqual(manifest?.repos.count, 1)
+        XCTAssertEqual(manifest?.repos.first?.subdirectory, "lib-existing")
+    }
+
     func testCreateSpaceProjectAndSymlink() throws {
         let sandbox = try TestSupport.makeTempDir()
         let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)

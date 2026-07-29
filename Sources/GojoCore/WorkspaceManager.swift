@@ -62,9 +62,11 @@ public final class WorkspaceManager {
                                  existingFolder: URL?) throws -> URL {
         let root = existingFolder ?? codingSpace.appendingPathComponent(name)
         try fm.createDirectory(at: root, withIntermediateDirectories: true)
-        try store.saveProject(ProjectManifest(name: name), at: root)
+        if (try store.loadProject(at: root)) == nil {
+            try store.saveProject(ProjectManifest(name: name), at: root)
+        }
 
-        var ws = (try store.loadWorkspace(at: codingSpace)) ?? WorkspaceManifest(name: name)
+        var ws = (try store.loadWorkspace(at: codingSpace)) ?? WorkspaceManifest(name: codingSpace.lastPathComponent)
         let rel = root.lastPathComponent
         if !ws.projectDirectories.contains(rel) { ws.projectDirectories.append(rel) }
         try store.saveWorkspace(ws, at: codingSpace)
@@ -87,6 +89,10 @@ public final class WorkspaceManager {
             m.repos[i].branch = branch
             try store.saveProject(m, at: project)
         }
+    }
+
+    public func listBranches(repoSubdir: String, in project: URL) throws -> [String] {
+        try git.listBranches(at: project.appendingPathComponent(repoSubdir))
     }
 
     public func syncRepo(subdir: String, in project: URL) throws {

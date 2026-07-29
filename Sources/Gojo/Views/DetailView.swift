@@ -11,6 +11,8 @@ struct DetailView: View {
     @State private var symlinkLinkName = ""
     @State private var showCreateProject = false
     @State private var newProjectName = ""
+    @State private var branchSheetRepo: String?
+    @State private var branchOptions: [String] = []
 
     var body: some View {
         switch state.selection {
@@ -62,6 +64,18 @@ struct DetailView: View {
                             Text(repo.branch ?? "-").foregroundStyle(.secondary)
                             Button("同步") {
                                 state.syncRepo(project, subdir: repo.subdirectory)
+                            }
+                            Button("切换分支") {
+                                branchSheetRepo = repo.subdirectory
+                                branchOptions = state.branches(for: project, subdir: repo.subdirectory)
+                            }
+                            .confirmationDialog("选择分支", isPresented: .constant(branchSheetRepo == repo.subdirectory), presenting: branchOptions) { branches in
+                                ForEach(branches, id: \.self) { branch in
+                                    Button(branch) {
+                                        state.setBranch(project, subdir: repo.subdirectory, branch: branch)
+                                        branchSheetRepo = nil
+                                    }
+                                }
                             }
                         }
                     }
