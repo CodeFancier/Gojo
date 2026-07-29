@@ -2,87 +2,43 @@ import XCTest
 @testable import GojoCore
 
 final class WorkspaceManagerTests: XCTestCase {
-    private func makeManager(base: URL) -> WorkspaceManager {
-        WorkspaceManager(configStore: ConfigStore(baseDirectory: base))
-    }
-
-    func testSetPublicSpaceAndAddRepo() throws {
+    // 建一个已设定公共空间的 manager，返回 (manager, publicSpaceURL, sandbox)
+    func makeWithPublicSpace() throws -> (WorkspaceManager, URL, URL) {
         let sandbox = try TestSupport.makeTempDir()
-        let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
         let publicSpace = sandbox.appendingPathComponent("public")
         try FileManager.default.createDirectory(at: publicSpace, withIntermediateDirectories: true)
-
-        let mgr = makeManager(base: try TestSupport.makeTempDir())
+        let mgr = WorkspaceManager(configStore: ConfigStore(baseDirectory: try TestSupport.makeTempDir()))
         try mgr.setPublicSpace(publicSpace)
-        try mgr.addPublicRepo(url: source.path)
-
-        let repos = try mgr.publicRepos()
-        XCTAssertEqual(repos.map { $0.lastPathComponent }, ["lib"])
+        return (mgr, publicSpace, sandbox)
     }
 
-    func testAdoptExistingProjectPreservesManifest() throws {
-        let sandbox = try TestSupport.makeTempDir()
-        let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
-        let base = try TestSupport.makeTempDir()
-        let mgr = makeManager(base: base)
-
-        // Create a coding space
-        let wsRoot = sandbox.appendingPathComponent("workspace")
-        try mgr.createCodingSpace(name: "workspace", at: wsRoot)
-
-        // Create an existing folder with a pre-existing manifest
-        let existingFolder = wsRoot.appendingPathComponent("existing-project")
-        try FileManager.default.createDirectory(at: existingFolder, withIntermediateDirectories: true)
-
-        let preExistingManifest = ProjectManifest(
-            name: "existing-project",
-            repos: [GitRepoBinding(url: source.path, subdirectory: "lib-existing", branch: "main")],
-            symlinks: []
-        )
-        try ConfigStore(baseDirectory: base).saveProject(preExistingManifest, at: existingFolder)
-
-        // Adopt the existing folder (should preserve the manifest)
-        _ = try mgr.createDevProject(name: "existing-project", in: wsRoot, existingFolder: existingFolder)
-
-        // Load the manifest and verify it still has the pre-existing repo
-        let manifest = try ConfigStore(baseDirectory: base).loadProject(at: existingFolder)
-        XCTAssertEqual(manifest?.repos.count, 1)
-        XCTAssertEqual(manifest?.repos.first?.subdirectory, "lib-existing")
+    func testAddPublicProjectDefinitionOnly() throws {
+        let (mgr, _, _) = try makeWithPublicSpace()
+        try mgr.addPublicProject(name: "lib", url: "git@x:lib.git")
+        let projects = try mgr.publicProjects()
+        XCTAssertEqual(projects.map { $0.name }, ["lib"])
+        XCTAssertFalse(projects[0].cloned)      // 只定义，未克隆
     }
 
-    func testCreateSpaceProjectAndSymlink() throws {
-        let sandbox = try TestSupport.makeTempDir()
+    func testClonePublicProjectSetsCloned() throws {
+        let (mgr, publicSpace, sandbox) = try makeWithPublicSpace()
         let source = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
-        let publicSpace = sandbox.appendingPathComponent("public")
-        try FileManager.default.createDirectory(at: publicSpace, withIntermediateDirectories: true)
-        let base = try TestSupport.makeTempDir()
-        let mgr = makeManager(base: base)
-        try mgr.setPublicSpace(publicSpace)
-        try mgr.addPublicRepo(url: source.path)   // → public/lib
+        try mgr.addPublicProject(name: "lib", url: source.path)
+        let id = try mgr.publicProjects().first { $0.name == "lib" }!.id
 
-        // 编码空间
-        let wsRoot = sandbox.appendingPathComponent("电商中台")
-        try mgr.createCodingSpace(name: "电商中台", at: wsRoot)
-        XCTAssertTrue(ConfigStore(baseDirectory: base).loadIndex()
-            .codingSpacePaths.contains(wsRoot.path))
-
-        // 开发项目（新建子文件夹）
-        let projRoot = try mgr.createDevProject(name: "订单", in: wsRoot, existingFolder: nil)
-        XCTAssertTrue(FileManager.default.fileExists(atPath: projRoot.path))
-
-        // 项目内克隆一个 git 仓库
-        try mgr.addRepo(url: source.path, subdirectory: "lib-copy", to: projRoot)
+        try mgr.clonePublicProject(id: id)
         XCTAssertTrue(FileManager.default.fileExists(
-            atPath: projRoot.appendingPathComponent("lib-copy/README.md").path))
+            atPath: publicSpace.appendingPathComponent("lib/README.md").path))
+        XCTAssertTrue(try mgr.publicProjects().first { $0.name == "lib" }!.cloned)
+    }
 
-        // 软链接公共库
-        try mgr.addSymlink(publicRepoName: "lib", linkName: "shared-lib", in: projRoot)
-        let link = projRoot.appendingPathComponent("shared-lib")
-        XCTAssertFalse(SymlinkService().isBroken(link))
+    func testPublicProjectsAutoDetectsScannedRepo() throws {
+        let (mgr, publicSpace, sandbox) = try makeWithPublicSpace()
+        // 直接在公共空间放一个已 clone 的库（不经 addPublicProject）
+        let source = try TestSupport.makeLocalGitRepo(named: "src", in: sandbox)
+        try GitService().clone(url: source.path, into: publicSpace.appendingPathComponent("manual"))
 
-        // 清单已记录
-        let manifest = try ConfigStore(baseDirectory: base).loadProject(at: projRoot)
-        XCTAssertEqual(manifest?.repos.count, 1)
-        XCTAssertEqual(manifest?.symlinks.first?.publicRepoName, "lib")
+        let projects = try mgr.publicProjects()
+        XCTAssertTrue(projects.contains { $0.name == "manual" && $0.cloned })
     }
 }

@@ -74,4 +74,9 @@ public struct GitService {
         let log = try git(["log", "@{u}..HEAD", "--oneline"], at: repo)
         return !log.isEmpty
     }
+
+    /// 读取 origin 远程 URL；无则抛错。
+    public func remoteURL(at repo: URL) throws -> String {
+        try git(["remote", "get-url", "origin"], at: repo)
+    }
 }
