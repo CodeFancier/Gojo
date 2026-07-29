@@ -1,8 +1,13 @@
 import SwiftUI
 import GojoCore
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @EnvironmentObject var state: AppState
+
+    @State private var showModePicker = false
+    @State private var dropTargetSpace: URL?
+    @State private var droppedProjectId: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -16,6 +21,9 @@ struct SidebarView: View {
                             Text(proj.name)
                         }
                         .foregroundStyle(.secondary)
+                        .onDrag {
+                            NSItemProvider(object: proj.id.uuidString as NSString)
+                        }
                     }
                 }
                 Section("📁 编码空间") {
@@ -35,6 +43,18 @@ struct SidebarView: View {
                             Text(space.lastPathComponent)
                                 .tag(SidebarSelection.codingSpace(space))
                         }
+                        .onDrop(of: [.text], isTargeted: nil) { providers in
+                            guard let p = providers.first else { return false }
+                            _ = p.loadObject(ofClass: NSString.self) { obj, _ in
+                                guard let s = obj as? String, let id = UUID(uuidString: s) else { return }
+                                DispatchQueue.main.async {
+                                    dropTargetSpace = space
+                                    droppedProjectId = id
+                                    showModePicker = true
+                                }
+                            }
+                            return true
+                        }
                     }
                 }
             }
@@ -43,6 +63,19 @@ struct SidebarView: View {
                 Button("指定公共空间") { state.chooseAndSetPublicSpace() }
                 Button("新建编码空间") { state.createCodingSpace() }
             }.padding(8)
+        }
+        .confirmationDialog("选择加入模式", isPresented: $showModePicker) {
+            Button("Git 模式") {
+                if let s = dropTargetSpace, let id = droppedProjectId {
+                    state.addPublicToSpace(s, projectId: id, mode: .git)
+                }
+            }
+            Button("软链接模式") {
+                if let s = dropTargetSpace, let id = droppedProjectId {
+                    state.addPublicToSpace(s, projectId: id, mode: .symlink)
+                }
+            }
+            Button("取消", role: .cancel) {}
         }
     }
 
