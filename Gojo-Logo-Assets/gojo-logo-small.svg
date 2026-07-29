@@ -1,26 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
-  <title id="title">Gojo small-size app icon</title>
-  <desc id="desc">An optically adjusted Gojo icon for 16 to 64 pixel rendering.</desc>
+  <title id="title">Gojo small-size logo</title>
+  <desc id="desc">An optically adjusted Gojo logo for 16 to 64 pixel rendering.</desc>
   <defs>
-    <linearGradient id="bg" x1="150" y1="80" x2="870" y2="950" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#272C36"/>
-      <stop offset="1" stop-color="#090B10"/>
+    <linearGradient id="surface" x1="140" y1="70" x2="880" y2="960" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#252B35"/>
+      <stop offset=".48" stop-color="#111827"/>
+      <stop offset="1" stop-color="#05080D"/>
     </linearGradient>
-    <radialGradient id="core" cx="42%" cy="34%" r="72%">
-      <stop offset="0" stop-color="#EAF9FF"/>
-      <stop offset="0.25" stop-color="#81D4FF"/>
-      <stop offset="0.62" stop-color="#1687F2"/>
-      <stop offset="1" stop-color="#0749AE"/>
+    <linearGradient id="portal" x1="300" y1="210" x2="735" y2="805" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset=".68" stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#DCEAFF"/>
+    </linearGradient>
+    <radialGradient id="core" cx="35%" cy="25%" r="80%">
+      <stop offset="0" stop-color="#A9D8FF"/>
+      <stop offset=".32" stop-color="#60A5FA"/>
+      <stop offset=".72" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#1261C9"/>
     </radialGradient>
-    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
-      <feGaussianBlur stdDeviation="24"/>
+    <filter id="edgeGlow" x="-35%" y="-35%" width="170%" height="190%">
+      <feDropShadow dx="0" dy="11" stdDeviation="10" flood-color="#3B82F6" flood-opacity=".72"/>
+    </filter>
+    <filter id="coreGlow" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur stdDeviation="22"/>
     </filter>
   </defs>
-  <rect x="32" y="32" width="960" height="960" rx="218" fill="url(#bg)"/>
-  <rect x="35" y="35" width="954" height="954" rx="214" fill="none" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="6"/>
-  <circle cx="512" cy="512" r="152" fill="#168BFF" opacity="0.32" filter="url(#glow)"/>
-  <path d="M733 340 A292 292 0 1 0 752 665 L752 560 L608 560"
-        fill="none" stroke="#FFFFFF" stroke-width="84"
-        stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="512" cy="512" r="108" fill="url(#core)" stroke="#B9E8FF" stroke-width="7"/>
+  <rect x="32" y="32" width="960" height="960" rx="218" fill="url(#surface)"/>
+  <rect x="35" y="35" width="954" height="954" rx="215" fill="none" stroke="#F8FAFC" stroke-opacity=".16" stroke-width="6"/>
+  <path d="M738 331 A304 304 0 1 0 760 678 L760 564 L608 564"
+        fill="none" stroke="url(#portal)" stroke-width="94"
+        stroke-linecap="round" stroke-linejoin="round" filter="url(#edgeGlow)"/>
+  <circle cx="512" cy="512" r="92" fill="#3B82F6" opacity=".48" filter="url(#coreGlow)"/>
+  <circle cx="512" cy="512" r="64" fill="url(#core)" stroke="#BFDBFE" stroke-width="5"/>
 </svg>

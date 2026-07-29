@@ -1,26 +1,50 @@
-Gojo Logo Assets
+GOJO BRAND KIT — DOMAIN EDITION
 
-SVG 是源文件，Gojo.icns 由 Scripts/make-icon.sh 从这些矢量图导出。
+This package follows the Gojo “AI Workspace · Domain Expansion” visual system.
+The SVG files are the editable source assets; all PNG and macOS icon files are
+deterministic exports from those vectors.
 
-Files:
-- gojo-logo.svg          主图标（完整版），用于 128px 及以上尺寸
-- gojo-logo-small.svg    光学优化的小尺寸源，用于 16-64px 渲染
-- gojo-logo-mono.svg     单色版本
-- gojo-wordmark.svg      横向「图标 + Gojo」组合标
-- gojo-wordmark-mono.svg 单色横向组合标
+SOURCE ASSETS
 
-Brand colors:
-- Ink:       #111318
-- Surface:   #0D0F14 - #20242D
-- Core blue: #1261C9 - #D9F3FF
-- White:     #FFFFFF
+- gojo-logo.svg
+  Full-color 1024 px master mark with a dark rounded tile, luminous G portal,
+  three aggregation rings, and a blue AI core.
 
-Concept:
-- G 门户 = Gojo，一条连续的几何路径
-- 外环   = 领域 / 工作空间 (Domain / Workspace)
-- 中心   = AI Agent
-- 同心圆 = 领域展开 (Domain Expansion)
+- gojo-logo-small.svg
+  Optically adjusted source for 16–64 px rendering. It uses a heavier portal
+  silhouette and reduced micro-detail for clearer small icons.
 
-生成 icns:
-  ./Scripts/make-icon.sh
-16/32/64px 使用 gojo-logo-small.svg，128px 及以上使用 gojo-logo.svg。
+- gojo-logo-mono.svg
+  Monochrome dark-tile mark without filters.
+
+- gojo-wordmark.svg
+  Horizontal dark-background lockup with the full-color icon, white Gojo
+  lettering, and a blue j dot.
+
+- gojo-wordmark-mono.svg
+  Horizontal light-background lockup with a monochrome icon and dark lettering.
+
+EXPORTED ASSETS
+
+- png/: full-color icon at 128, 256, 512, and 1024 px
+- png-mono/: monochrome icon at 128, 256, 512, and 1024 px
+- wordmark/: full-color and monochrome horizontal PNG lockups
+- Gojo.iconset/: complete 16–1024 px macOS iconset
+- Gojo.icns: compiled macOS app icon
+
+BRAND COLORS
+
+- Core Blue:  #3B82F6
+- Light Blue: #60A5FA
+- Deep Ink:   #111827
+- Slate:      #374151
+- Cloud:      #F8FAFC
+
+USAGE NOTES
+
+- Use the full-color master at 128 px and above.
+- Use the small-size source for icons below 128 px.
+- Keep the clear space around the G at least equal to the core diameter.
+- Do not recolor the blue core, alter the portal opening, or add text inside
+  the app tile.
+- Preserve transparency outside the rounded tile.

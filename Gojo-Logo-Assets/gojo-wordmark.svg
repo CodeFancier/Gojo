@@ -1,37 +1,51 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="512" viewBox="0 0 1600 512" role="img" aria-labelledby="title desc">
   <title id="title">Gojo horizontal logo</title>
-  <desc id="desc">The Gojo app icon with a custom geometric Gojo wordmark.</desc>
+  <desc id="desc">The luminous Gojo portal icon with a geometric white wordmark and blue j dot.</desc>
   <defs>
-    <linearGradient id="bg" x1="56" y1="28" x2="472" y2="492" gradientUnits="userSpaceOnUse">
-      <stop offset="0" stop-color="#292E38"/>
-      <stop offset="0.5" stop-color="#151922"/>
-      <stop offset="1" stop-color="#090B10"/>
+    <linearGradient id="tile" x1="120" y1="40" x2="460" y2="500" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#252B35"/>
+      <stop offset=".48" stop-color="#111827"/>
+      <stop offset="1" stop-color="#05080D"/>
     </linearGradient>
-    <radialGradient id="core" cx="42%" cy="34%" r="72%">
-      <stop offset="0" stop-color="#F2FBFF"/>
-      <stop offset="0.16" stop-color="#BDEBFF"/>
-      <stop offset="0.42" stop-color="#49B9FF"/>
-      <stop offset="0.72" stop-color="#147EE8"/>
-      <stop offset="1" stop-color="#0749AE"/>
+    <linearGradient id="portal" x1="145" y1="110" x2="390" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset=".66" stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#BFDBFE"/>
+    </linearGradient>
+    <radialGradient id="core" cx="35%" cy="25%" r="80%">
+      <stop offset="0" stop-color="#BFE7FF"/>
+      <stop offset=".3" stop-color="#60A5FA"/>
+      <stop offset=".72" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#1261C9"/>
     </radialGradient>
-    <filter id="glow" x="-100%" y="-100%" width="300%" height="300%">
-      <feGaussianBlur stdDeviation="18"/>
+    <filter id="edgeGlow" x="-40%" y="-40%" width="180%" height="200%">
+      <feDropShadow dx="0" dy="7" stdDeviation="7" flood-color="#3B82F6" flood-opacity=".7"/>
+    </filter>
+    <filter id="coreGlow" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur stdDeviation="12"/>
     </filter>
   </defs>
 
-  <rect x="24" y="24" width="464" height="464" rx="104" fill="url(#bg)"/>
-  <rect x="26" y="26" width="460" height="460" rx="102" fill="none" stroke="#FFFFFF" stroke-opacity="0.13" stroke-width="3"/>
-  <circle cx="256" cy="256" r="74" fill="#168BFF" opacity="0.28" filter="url(#glow)"/>
-  <path d="M367 170 A146 146 0 1 0 376 332 L376 280 L304 280"
-        fill="none" stroke="#FFFFFF" stroke-width="38"
-        stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="256" cy="256" r="51" fill="url(#core)" stroke="#B8E9FF" stroke-opacity="0.72" stroke-width="2"/>
+  <rect x="24" y="24" width="464" height="464" rx="104" fill="url(#tile)"/>
+  <rect x="26" y="26" width="460" height="460" rx="102" fill="none" stroke="#F8FAFC" stroke-opacity=".16" stroke-width="3"/>
+  <g transform="translate(20 20) scale(.46)">
+    <g fill="none" stroke="#60A5FA">
+      <circle cx="512" cy="512" r="174" stroke-opacity=".22" stroke-width="3"/>
+      <circle cx="512" cy="512" r="126" stroke-opacity=".19" stroke-width="3"/>
+      <circle cx="512" cy="512" r="82" stroke-opacity=".16" stroke-width="3"/>
+    </g>
+    <path d="M738 331 A304 304 0 1 0 760 678 L760 564 L608 564"
+          fill="none" stroke="url(#portal)" stroke-width="84"
+          stroke-linecap="round" stroke-linejoin="round" filter="url(#edgeGlow)"/>
+    <circle cx="512" cy="512" r="86" fill="#3B82F6" opacity=".46" filter="url(#coreGlow)"/>
+    <circle cx="512" cy="512" r="58" fill="url(#core)" stroke="#BFDBFE" stroke-width="3"/>
+  </g>
 
-  <g fill="none" stroke="#111318" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
+  <g fill="none" stroke="#F8FAFC" stroke-width="42" stroke-linecap="round" stroke-linejoin="round">
     <path d="M824 161 A128 128 0 1 0 831 344 L831 276 L752 276"/>
     <circle cx="1016" cy="286" r="88"/>
     <path d="M1178 198 L1178 350 C1178 397 1152 421 1110 421"/>
-    <circle cx="1178" cy="116" r="22" fill="#111318" stroke="none"/>
     <circle cx="1390" cy="286" r="88"/>
   </g>
+  <circle cx="1178" cy="116" r="22" fill="#3B82F6"/>
 </svg>
