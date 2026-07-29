@@ -59,4 +59,19 @@ public struct GitService {
     public func pull(at repo: URL) throws {
         try git(["pull", "--ff-only"], at: repo)
     }
+
+    /// 工作区有未提交改动（含未跟踪文件）。
+    public func hasUncommittedChanges(at repo: URL) throws -> Bool {
+        let out = try git(["status", "--porcelain"], at: repo)
+        return !out.isEmpty
+    }
+
+    /// 有未推送到上游的提交；无上游按「有风险」处理（返回 true）。
+    public func hasUnpushedCommits(at repo: URL) throws -> Bool {
+        let upstream = try shell.run(
+            "git", ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], cwd: repo)
+        if upstream.exitCode != 0 { return true }   // 无上游 → 风险
+        let log = try git(["log", "@{u}..HEAD", "--oneline"], at: repo)
+        return !log.isEmpty
+    }
 }

@@ -44,4 +44,44 @@ final class GitServiceTests: XCTestCase {
 
         XCTAssertNoThrow(try git.pull(at: dest))
     }
+
+    func testUncommittedChangesDetected() throws {
+        let sandbox = try TestSupport.makeTempDir()
+        let source = try TestSupport.makeLocalGitRepo(named: "src", in: sandbox)
+        let dest = sandbox.appendingPathComponent("clone")
+        let git = GitService()
+        try git.clone(url: source.path, into: dest)
+
+        XCTAssertFalse(try git.hasUncommittedChanges(at: dest))
+        try "dirty".write(to: dest.appendingPathComponent("new.txt"),
+                          atomically: true, encoding: .utf8)
+        XCTAssertTrue(try git.hasUncommittedChanges(at: dest))
+    }
+
+    func testUnpushedCommitsDetected() throws {
+        let sandbox = try TestSupport.makeTempDir()
+        let source = try TestSupport.makeLocalGitRepo(named: "src", in: sandbox)
+        let dest = sandbox.appendingPathComponent("clone")
+        let git = GitService()
+        try git.clone(url: source.path, into: dest)
+
+        // 刚 clone，HEAD == origin/main，无未推送
+        XCTAssertFalse(try git.hasUnpushedCommits(at: dest))
+
+        // 本地新提交 → 未推送
+        let shell = ShellRunner()
+        _ = try shell.run("git", ["config", "user.email", "t@t.io"], cwd: dest)
+        _ = try shell.run("git", ["config", "user.name", "t"], cwd: dest)
+        try "x".write(to: dest.appendingPathComponent("a.txt"), atomically: true, encoding: .utf8)
+        _ = try shell.run("git", ["add", "."], cwd: dest)
+        _ = try shell.run("git", ["commit", "-q", "-m", "local"], cwd: dest)
+        XCTAssertTrue(try git.hasUnpushedCommits(at: dest))
+    }
+
+    func testNoUpstreamTreatedAsUnpushed() throws {
+        let sandbox = try TestSupport.makeTempDir()
+        // makeLocalGitRepo 建的是本地初始化仓库，无上游
+        let repo = try TestSupport.makeLocalGitRepo(named: "solo", in: sandbox)
+        XCTAssertTrue(try GitService().hasUnpushedCommits(at: repo))
+    }
 }
