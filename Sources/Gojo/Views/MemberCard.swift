@@ -7,6 +7,8 @@ struct MemberCard: View {
     @EnvironmentObject var state: AppState
     let space: URL
     let member: ScannedMember
+    /// 拖拽开始时回传文件夹名，由领域展示「移动到其他空间」覆盖层。
+    var onBeginDrag: (String) -> Void = { _ in }
 
     @State private var hovering = false
     @State private var showBranchPicker = false
@@ -53,8 +55,9 @@ struct MemberCard: View {
         .onHover { h in withAnimation(Motion.dropZone) { hovering = h } }
         .contextMenu { menuItems }
         .onDrag {
-            NSItemProvider(object: DragPayload.member(space: space,
-                                                      folder: member.folderName) as NSString)
+            onBeginDrag(member.folderName)
+            return NSItemProvider(object: DragPayload.member(space: space,
+                                                             folder: member.folderName) as NSString)
         } preview: {
             HStack(spacing: 6) {
                 SourceBadgeIcon(kind: SourceIconKind(member.form), size: 16)
