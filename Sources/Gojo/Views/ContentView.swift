@@ -10,7 +10,7 @@ struct ContentView: View {
             case .shelf:
                 ShelfView()
             case .publicSpace:
-                Text("公共空间")                       // Task 10 替换
+                PublicSpaceDomain()
             case .codingSpace(let u):
                 CodingSpaceDomain(space: u)
             case .shelfDropping:
