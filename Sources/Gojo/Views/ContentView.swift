@@ -12,7 +12,7 @@ struct ContentView: View {
             case .publicSpace:
                 Text("公共空间")                       // Task 10 替换
             case .codingSpace(let u):
-                Text(u.lastPathComponent)             // Task 8 替换
+                CodingSpaceDomain(space: u)
             case .shelfDropping:
                 Text("投放中")                         // Task 11 替换
             }
