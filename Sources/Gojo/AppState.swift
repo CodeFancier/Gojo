@@ -65,6 +65,10 @@ final class AppState: ObservableObject {
     func addPublicToSpace(_ space: URL, projectId: UUID, mode: MemberMode) {
         run { try manager.addPublicProjectToSpace(projectId: projectId, mode: mode, in: space) }
     }
+    func moveMember(_ folderName: String, from source: URL, to dest: URL) {
+        guard source != dest else { return }
+        run { try manager.moveMember(folderName: folderName, from: source, to: dest) }
+    }
     func memberHasLocalChanges(_ space: URL, folderName: String) -> Bool {
         (try? manager.memberHasLocalChanges(folderName: folderName, in: space)) ?? false
     }

@@ -7,6 +7,7 @@ public enum WorkspaceError: Error, Equatable {
     case memberNotFound(String)
     case notASymlinkMember(String)
     case notAGitMember(String)
+    case memberNameCollision(String)
 }
 
 public final class WorkspaceManager {
@@ -136,6 +137,32 @@ public final class WorkspaceManager {
         }
         try upsertMember(WorkspaceMember(folderName: proj.name,
                                          publicProjectId: proj.id, mode: mode), in: codingSpace)
+    }
+
+    /// 把成员整体从一个编码空间移动到另一个。standalone / git / symlink 统一处理：
+    /// moveItem 迁移文件夹或符号链接本身（绝对路径符号链接移动后仍可解析），
+    /// 若有清单绑定则一并迁移。无损、可逆（挪回即还原）。
+    public func moveMember(folderName: String, from source: URL, to dest: URL) throws {
+        let srcPath = source.appendingPathComponent(folderName)
+        let destPath = dest.appendingPathComponent(folderName)
+        guard !fm.fileExists(atPath: destPath.path) else {
+            throw WorkspaceError.memberNameCollision(folderName)
+        }
+
+        var srcManifest = (try store.loadWorkspace(at: source))
+            ?? WorkspaceManifest(name: source.lastPathComponent)
+        let bound = srcManifest.members.first { $0.folderName == folderName }
+
+        try fm.moveItem(at: srcPath, to: destPath)
+
+        guard let bound else { return }        // standalone：无绑定，仅移动文件夹
+        srcManifest.members.removeAll { $0.folderName == folderName }
+        try store.saveWorkspace(srcManifest, at: source)
+        var destManifest = (try store.loadWorkspace(at: dest))
+            ?? WorkspaceManifest(name: dest.lastPathComponent)
+        destManifest.members.removeAll { $0.folderName == folderName }
+        destManifest.members.append(bound)
+        try store.saveWorkspace(destManifest, at: dest)
     }
 
     public func memberHasLocalChanges(folderName: String, in codingSpace: URL) throws -> Bool {

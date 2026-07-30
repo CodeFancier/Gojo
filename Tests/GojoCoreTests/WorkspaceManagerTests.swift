@@ -179,4 +179,72 @@ final class WorkspaceManagerTests: XCTestCase {
         try GitService().clone(url: source.path, into: ws.appendingPathComponent("lib"))
         XCTAssertNoThrow(try mgr.syncMember(folderName: "lib", in: ws))
     }
+
+    // MARK: - 成员跨空间移动
+
+    // 建两个编码空间 ws1 / ws2，返回 (mgr, ws1, ws2, sandbox)
+    private func makeTwoSpaces() throws -> (WorkspaceManager, URL, URL, URL) {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let ws1 = sandbox.appendingPathComponent("ws1")
+        let ws2 = sandbox.appendingPathComponent("ws2")
+        try mgr.createCodingSpace(name: "ws1", at: ws1)
+        try mgr.createCodingSpace(name: "ws2", at: ws2)
+        return (mgr, ws1, ws2, sandbox)
+    }
+
+    func testMoveStandaloneMemberMovesFolderNoBinding() throws {
+        let (mgr, ws1, ws2, sandbox) = try makeTwoSpaces()
+        let source = try TestSupport.makeLocalGitRepo(named: "s", in: sandbox)
+        try GitService().clone(url: source.path, into: ws1.appendingPathComponent("solo"))
+
+        try mgr.moveMember(folderName: "solo", from: ws1, to: ws2)
+
+        XCTAssertEqual(try mgr.scanMembers(in: ws1).count, 0)
+        let moved = try mgr.scanMembers(in: ws2)
+        XCTAssertEqual(moved.map { $0.folderName }, ["solo"])
+        XCTAssertEqual(moved.first?.form, .standalone)
+    }
+
+    func testMovePublicGitMemberMigratesBinding() throws {
+        let (mgr, ws1, ws2, sandbox) = try makeTwoSpaces()
+        let repo = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
+        try mgr.addPublicProject(name: "lib", url: repo.path)
+        let id = try mgr.publicProjects().first { $0.name == "lib" }!.id
+        try mgr.addPublicProjectToSpace(projectId: id, mode: .git, in: ws1)
+
+        try mgr.moveMember(folderName: "lib", from: ws1, to: ws2)
+
+        XCTAssertEqual(try mgr.scanMembers(in: ws1).count, 0)
+        // 绑定随之迁移：目标空间仍识别为 publicGit
+        XCTAssertEqual(try mgr.scanMembers(in: ws2).first?.form, .publicGit(id))
+    }
+
+    func testMoveSymlinkMemberStillResolves() throws {
+        let (mgr, ws1, ws2, sandbox) = try makeTwoSpaces()
+        let repo = try TestSupport.makeLocalGitRepo(named: "lib", in: sandbox)
+        try mgr.addPublicProject(name: "lib", url: repo.path)
+        let id = try mgr.publicProjects().first { $0.name == "lib" }!.id
+        try mgr.clonePublicProject(id: id)
+        try mgr.addPublicProjectToSpace(projectId: id, mode: .symlink, in: ws1)
+
+        try mgr.moveMember(folderName: "lib", from: ws1, to: ws2)
+
+        // 绝对路径符号链接移动后仍可解析、仍被识别为 symlink
+        let moved = try mgr.scanMembers(in: ws2)
+        XCTAssertEqual(moved.first?.form, .publicSymlink(id))
+        XCTAssertFalse(SymlinkService().isBroken(ws2.appendingPathComponent("lib")))
+    }
+
+    func testMoveMemberNameCollisionThrows() throws {
+        let (mgr, ws1, ws2, sandbox) = try makeTwoSpaces()
+        let repo = try TestSupport.makeLocalGitRepo(named: "dup", in: sandbox)
+        try GitService().clone(url: repo.path, into: ws1.appendingPathComponent("dup"))
+        try GitService().clone(url: repo.path, into: ws2.appendingPathComponent("dup"))
+
+        XCTAssertThrowsError(try mgr.moveMember(folderName: "dup", from: ws1, to: ws2)) {
+            XCTAssertEqual($0 as? WorkspaceError, .memberNameCollision("dup"))
+        }
+        // 失败后源仍在
+        XCTAssertEqual(try mgr.scanMembers(in: ws1).first?.folderName, "dup")
+    }
 }

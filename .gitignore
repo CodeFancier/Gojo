@@ -1,7 +1,33 @@
+# macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Xcode
+build/
+DerivedData/
 *.xcuserstate
 xcuserdata/
-build/
-.build/
-DerivedData/
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# App bundles & distribution
+*.app
 *.dmg
+
+# Docs (design/spec/plans, not tracked)
+docs/
+
+# Brainstorming visual companion artifacts
+.superpowers/
