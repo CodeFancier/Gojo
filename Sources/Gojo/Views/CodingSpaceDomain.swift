@@ -7,30 +7,48 @@ struct CodingSpaceDomain: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let space: URL
 
+    @State private var draggingProjectId: UUID?
+
     private let columns = [GridItem(.adaptive(minimum: 168, maximum: 220), spacing: 12, alignment: .top)]
 
     var body: some View {
         VStack(spacing: 0) {
             DomainTopBar(title: space.lastPathComponent)
 
-            ScrollView {
-                let members = state.members(in: space)
-                if members.isEmpty {
-                    Text("空间里还没有仓库，从下方托盘拖入公共项目，或在访达里放入现有仓库")
-                        .font(.system(size: 12)).foregroundStyle(Color(white: 0.5))
-                        .frame(maxWidth: .infinity).padding(.top, 60)
-                } else {
-                    LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
-                        ForEach(Array(members.enumerated()), id: \.element.folderName) { i, m in
-                            MemberCard(space: space, member: m)
-                                .transition(.opacity)
+            ZStack {
+                ScrollView {
+                    let members = state.members(in: space)
+                    if members.isEmpty {
+                        Text("空间里还没有仓库，从下方托盘拖入公共项目，或在访达里放入现有仓库")
+                            .font(.system(size: 12)).foregroundStyle(Color(white: 0.5))
+                            .frame(maxWidth: .infinity).padding(.top, 60)
+                    } else {
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
+                            ForEach(Array(members.enumerated()), id: \.element.folderName) { i, m in
+                                MemberCard(space: space, member: m)
+                                    .transition(.opacity)
+                            }
                         }
+                        .padding(16)
                     }
-                    .padding(16)
+                }
+                .opacity(draggingProjectId == nil ? 1 : 0.35)
+
+                if let id = draggingProjectId {
+                    DropZones(draggingProjectId: id,
+                              onDrop: { pid, mode in
+                                  state.addPublicToSpace(space, projectId: pid, mode: mode)
+                                  withAnimation(Motion.dropZone) { draggingProjectId = nil }
+                              },
+                              onDismiss: {
+                                  withAnimation(Motion.dropZone) { draggingProjectId = nil }
+                              })
                 }
             }
 
-            ProjectTray(space: space)
+            ProjectTray(space: space) { id in
+                withAnimation(Motion.dropZone) { draggingProjectId = id }
+            }
         }
         .background(DomainBackground())
     }
