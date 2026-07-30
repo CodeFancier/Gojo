@@ -8,7 +8,7 @@ struct ContentView: View {
         Group {
             switch state.route {
             case .shelf:
-                Text("展示柜")                         // Task 7 替换
+                ShelfView()
             case .publicSpace:
                 Text("公共空间")                       // Task 10 替换
             case .codingSpace(let u):
