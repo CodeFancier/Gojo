@@ -8,7 +8,12 @@ let package = Package(
         .target(name: "GojoCore"),
         .executableTarget(
             name: "Gojo",
-            dependencies: ["GojoCore"]
+            dependencies: ["GojoCore"],
+            // Info.plist / Gojo.icns 仅供打包脚本使用，排除出运行时资源 bundle。
+            exclude: ["Resources/Info.plist", "Resources/Gojo.icns"],
+            resources: [
+                .process("Resources/gojo-wordmark.png"),
+            ]
         ),
         .testTarget(name: "GojoCoreTests", dependencies: ["GojoCore"]),
     ]

@@ -5,8 +5,8 @@ public enum PublicProjectSearch {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return projects }
         return projects.filter {
-            $0.name.localizedCaseInsensitiveContains(needle)
-                || $0.url.localizedCaseInsensitiveContains(needle)
+            $0.name.localizedStandardContains(needle)
+                || $0.url.localizedStandardContains(needle)
         }
     }
 }

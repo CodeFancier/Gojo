@@ -27,6 +27,22 @@ final class PublicProjectSearchTests: XCTestCase {
         )
     }
 
+    func testUserFacingMatchingIgnoresDiacriticsInNamesAndURLs() {
+        let localizedProjects = [
+            PublicProject(name: "Café Tools", url: "https://git.example.com/tools.git"),
+            PublicProject(name: "Profile Kit", url: "https://git.example.com/résumé-kit.git"),
+        ]
+
+        XCTAssertEqual(
+            PublicProjectSearch.filter(localizedProjects, query: "cafe").map(\.name),
+            ["Café Tools"]
+        )
+        XCTAssertEqual(
+            PublicProjectSearch.filter(localizedProjects, query: "resume").map(\.name),
+            ["Profile Kit"]
+        )
+    }
+
     func testNoMatchReturnsEmptyArray() {
         XCTAssertTrue(PublicProjectSearch.filter(projects, query: "missing").isEmpty)
     }

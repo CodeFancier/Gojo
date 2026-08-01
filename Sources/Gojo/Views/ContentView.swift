@@ -4,23 +4,13 @@ import GojoCore
 struct ContentView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var draggingPublicProjectId: UUID?
 
     var body: some View {
         ZStack {
             DomainBackground()
-            VStack(spacing: 0) {
-                content
-
-                if let mode = publicBarMode {
-                    PersistentPublicSpaceBar(
-                        mode: mode,
-                        onOpen: openPublicSpace,
-                        onDragProject: beginPublicProjectDrag
-                    )
-                    .transition(.opacity)
-                }
-            }
+            routedLayout
         }
         .frame(minWidth: 720, minHeight: 460)
         .overlay(alignment: .bottom) {
@@ -64,6 +54,33 @@ struct ContentView: View {
         } message: { Text(state.errorMessage ?? "") }
     }
 
+    @ViewBuilder private var routedLayout: some View {
+        if dynamicTypeSize.isAccessibilitySize, publicBarMode != nil {
+            ScrollView(.vertical) {
+                routeAndPublicBar(accessibilityLayout: true)
+                    .frame(maxWidth: .infinity)
+            }
+        } else {
+            routeAndPublicBar(accessibilityLayout: false)
+        }
+    }
+
+    private func routeAndPublicBar(accessibilityLayout: Bool) -> some View {
+        VStack(spacing: 0) {
+            content
+                .frame(minHeight: accessibilityLayout ? accessibilityRouteMinimumHeight : nil)
+
+            if let mode = publicBarMode {
+                PersistentPublicSpaceBar(
+                    mode: mode,
+                    onOpen: openPublicSpace,
+                    onDragProject: beginPublicProjectDrag
+                )
+                .transition(.opacity)
+            }
+        }
+    }
+
     @ViewBuilder private var content: some View {
         switch state.route {
         case .shelf:
@@ -99,6 +116,15 @@ struct ContentView: View {
             source
         case .shelf, .publicSpace:
             nil
+        }
+    }
+
+    private var accessibilityRouteMinimumHeight: CGFloat {
+        switch state.route {
+        case .codingSpace, .shelfDropping:
+            260
+        case .shelf, .publicSpace:
+            0
         }
     }
 

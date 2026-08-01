@@ -3,28 +3,41 @@ import SwiftUI
 /// 首页：编码空间轮播。
 struct ShelfView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @ScaledMetric(relativeTo: .headline) private var carouselTitleLineHeight: CGFloat = 24
 
-    private let minimumAccessibleHeight: CGFloat = 300
+    private let wordmarkClearance: CGFloat = 48
+    private let authorClearance: CGFloat = 28
+    private let minimumFocusedCardHeight: CGFloat = 180
+    private let paginationHeight: CGFloat = 26
+
+    private var minimumAccessibleHeight: CGFloat {
+        wordmarkClearance
+            + carouselTitleLineHeight
+            + minimumFocusedCardHeight
+            + paginationHeight
+            + authorClearance
+    }
 
     var body: some View {
-        GeometryReader { geometry in
-            if dynamicTypeSize.isAccessibilitySize,
-               geometry.size.height < minimumAccessibleHeight {
-                ScrollView(.vertical) {
-                    carousel
-                        .frame(height: minimumAccessibleHeight)
-                }
-            } else {
-                carousel
+        carousel
+            .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? minimumAccessibleHeight : nil)
+            .background(DomainBackground())
+            .overlay(alignment: .topLeading) {
+                BrandWordmark(height: 26)
+                    .padding(.leading, 84)
+                    .padding(.top, 14)
             }
-        }
-        .background(DomainBackground())
+            .overlay(alignment: .bottomTrailing) {
+                AuthorCredit()
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 12)
+            }
     }
 
     private var carousel: some View {
         CodingSpaceCarousel()
-            .padding(.top, 48)
-            .padding(.bottom, 28)
+            .padding(.top, wordmarkClearance)
+            .padding(.bottom, authorClearance)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

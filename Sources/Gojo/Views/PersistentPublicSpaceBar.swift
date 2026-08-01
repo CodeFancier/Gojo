@@ -16,7 +16,17 @@ struct PersistentPublicSpaceBar: View {
     private var clonedCount: Int { state.publicProjects.lazy.filter(\.cloned).count }
     private var pendingCount: Int { state.publicProjects.count - clonedCount }
 
-    private var statusText: String {
+    private var summaryStatusText: String {
+        if state.publicSpaceFolder == nil {
+            "尚未指定公共空间"
+        } else if state.publicProjects.isEmpty {
+            "暂无公共项目"
+        } else {
+            "\(state.publicProjects.count) 个公共项目"
+        }
+    }
+
+    private var searchableStatusText: String {
         if state.publicSpaceFolder == nil {
             "未指定公共空间，请先进入公共空间设置"
         } else if state.publicProjects.isEmpty {
@@ -48,7 +58,7 @@ struct PersistentPublicSpaceBar: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("公共空间，\(statusText)，\(detailText)")
+                .accessibilityLabel("公共空间，\(summaryStatusText)，\(detailText)")
                 .accessibilityHint("打开公共空间")
             case .searchable:
                 searchableContent
@@ -71,12 +81,15 @@ struct PersistentPublicSpaceBar: View {
     private var summaryContent: some View {
         VStack(alignment: .leading, spacing: 5) {
             title
-            Text(statusText)
+            Text(summaryStatusText)
                 .font(.body)
                 .foregroundStyle(Color.textPrimary)
             Text(detailText)
                 .font(.callout)
                 .foregroundStyle(Color.textTertiary)
+            Label("打开公共空间", systemImage: "chevron.right")
+                .font(.callout.bold())
+                .foregroundStyle(Color.publicTeal)
         }
     }
 
@@ -84,7 +97,7 @@ struct PersistentPublicSpaceBar: View {
         VStack(alignment: .leading, spacing: 12) {
             VStack(alignment: .leading, spacing: 5) {
                 title
-                Text(statusText)
+                Text(searchableStatusText)
                     .font(.body)
                     .foregroundStyle(Color.textPrimary)
                 Text(detailText)
