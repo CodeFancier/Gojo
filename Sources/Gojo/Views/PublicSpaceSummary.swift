@@ -2,6 +2,8 @@ import SwiftUI
 import GojoCore
 
 struct PublicSpaceSummary: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let isConfigured: Bool
     let projects: [PublicProject]
     let onOpen: () -> Void
@@ -23,27 +25,7 @@ struct PublicSpaceSummary: View {
 
     var body: some View {
         Button(action: onOpen) {
-            HStack(spacing: 14) {
-                Label("公共空间", systemImage: "globe")
-                    .font(.headline)
-                    .foregroundStyle(Color.textPrimary)
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(statusText)
-                        .font(.subheadline)
-                    Text(detailText)
-                        .font(.caption)
-                        .foregroundStyle(Color.textTertiary)
-                }
-
-                Spacer(minLength: 12)
-
-                Label("打开公共空间", systemImage: "chevron.right")
-                    .font(.subheadline)
-                    .foregroundStyle(Color.textSecondary)
-            }
+            summaryContent
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
             .contentShape(Rectangle())
@@ -51,8 +33,53 @@ struct PublicSpaceSummary: View {
         .buttonStyle(.plain)
         .background(Color.chrome, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.cardStroke))
-        .accessibilityElement(children: .ignore)
         .accessibilityLabel("公共空间，\(statusText)，\(detailText)")
         .accessibilityHint("打开公共空间")
+    }
+
+    @ViewBuilder
+    private var summaryContent: some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                titleLabel
+                statusBlock(lineLimit: 2)
+                openLabel
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(spacing: 14) {
+                titleLabel
+                Divider()
+                statusBlock(lineLimit: 1)
+                Spacer(minLength: 12)
+                openLabel
+            }
+        }
+    }
+
+    private var titleLabel: some View {
+        Label("公共空间", systemImage: "globe")
+            .font(.headline)
+            .foregroundStyle(Color.textPrimary)
+    }
+
+    private func statusBlock(lineLimit: Int) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(statusText)
+                .font(.subheadline)
+                .lineLimit(lineLimit)
+            Text(detailText)
+                .font(.caption)
+                .foregroundStyle(Color.textTertiary)
+                .lineLimit(lineLimit)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var openLabel: some View {
+        Label("打开公共空间", systemImage: "chevron.right")
+            .font(.subheadline)
+            .foregroundStyle(Color.textSecondary)
+            .lineLimit(1)
     }
 }

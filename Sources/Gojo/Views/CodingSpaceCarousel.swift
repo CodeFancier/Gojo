@@ -30,26 +30,33 @@ struct CodingSpaceCarousel: View {
             Label("编码空间", systemImage: "shippingbox.fill")
                 .font(.headline)
                 .foregroundStyle(Color.textPrimary)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 42)
 
             GeometryReader { geo in
                 let viewportCenterX = geo.size.width / 2
-                // 200pt 焦点卡 + 20pt 底部留白 + 32pt 圆点区；最小窗口也不会挤到圆点。
-                let topPadding = min(52, max(24, geo.size.height - 252))
+                // 卡片滚动区与圆点区分配独立高度，极窄高度下也不会互相覆盖。
+                let dotAreaHeight: CGFloat = 26
+                let cardAreaHeight = max(0, geo.size.height - dotAreaHeight)
                 ScrollViewReader { proxy in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 14) {
-                            ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                                card(idx, item, proxy: proxy)
-                                    .id(idx)
-                                    .background(reporter(idx))
+                    VStack(spacing: 0) {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 14) {
+                                ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                                    card(idx, item, proxy: proxy)
+                                        .id(idx)
+                                        .background(reporter(idx))
+                                }
                             }
+                            .frame(minHeight: cardAreaHeight)
+                            .padding(.horizontal, viewportCenterX - 120)
                         }
-                        .padding(.horizontal, viewportCenterX - 120)
-                        .padding(.top, topPadding)
-                        .padding(.bottom, 20)
+                        .frame(height: cardAreaHeight)
+
+                        dots.frame(height: dotAreaHeight)
                     }
+                    .focusable()
                     .onPreferenceChange(CardCenterKey.self) { centers in
                         // 居中动画期间焦点已锁定目标卡，避免中途“最近卡”抢焦点致放大闪烁。
                         guard !scrollLock else { return }
@@ -70,11 +77,9 @@ struct CodingSpaceCarousel: View {
                             break
                         }
                     }
-                    .overlay(alignment: .bottom) { dots }
                 }
             }
         }
-        .focusable()
     }
 
     // MARK: 卡片
@@ -88,9 +93,16 @@ struct CodingSpaceCarousel: View {
             }
             return []
         }()
-        ShelfCard(item: item, focused: focused, members: members, reduceMotion: reduceMotion)
-            // 未居中的卡：先滑到中央聚焦；已居中的卡：再点才进入领域。
-            .onTapGesture { focused ? enter(item) : centerCard(idx, proxy: proxy) }
+        Button {
+            // 未居中的卡：先滑到中央聚焦；已居中的卡：再激活才进入领域。
+            focused ? enter(item) : centerCard(idx, proxy: proxy)
+        } label: {
+            ShelfCard(item: item, focused: focused, members: members, reduceMotion: reduceMotion)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel(for: item))
+        .accessibilityValue(focused ? "已居中" : "未居中")
+        .accessibilityHint(accessibilityHint(for: item, focused: focused))
     }
 
     /// 点击未居中卡：滑到中央并聚焦。复用 hover 的锁，避免居中动画期间被抢焦点闪烁。
@@ -100,7 +112,16 @@ struct CodingSpaceCarousel: View {
         scrollLock = true
         scrollGen += 1
         let generation = scrollGen
-        withAnimation(reduceMotion ? nil : Motion.carousel) {
+        guard !reduceMotion else {
+            proxy.scrollTo(idx, anchor: .center)
+            DispatchQueue.main.async {
+                if generation == scrollGen {
+                    scrollLock = false
+                }
+            }
+            return
+        }
+        withAnimation(Motion.carousel) {
             proxy.scrollTo(idx, anchor: .center)
         }
         Task {
@@ -124,12 +145,11 @@ struct CodingSpaceCarousel: View {
         HStack(spacing: 6) {
             ForEach(0..<items.count, id: \.self) { index in
                 Capsule()
-                    .fill(index == focusIndex ? Color.lightBlue : Color.white.opacity(0.20))
+                    .fill(index == focusIndex ? Color.lightBlue : Color.cardStroke)
                     .frame(width: index == focusIndex ? 18 : 6, height: 6)
                     .animation(reduceMotion ? nil : Motion.dropZone, value: focusIndex)
             }
         }
-        .padding(.bottom, 14)
     }
 
     // MARK: 动作
@@ -150,6 +170,28 @@ struct CodingSpaceCarousel: View {
             }
         case .newSpace:
             state.createCodingSpace()
+        }
+    }
+
+    private func accessibilityLabel(for item: ShelfItem) -> String {
+        switch item {
+        case .coding(let url):
+            return "编码空间，\(url.lastPathComponent)"
+        case .newSpace:
+            return "新建编码空间"
+        }
+    }
+
+    private func accessibilityHint(for item: ShelfItem, focused: Bool) -> String {
+        switch (item, focused) {
+        case (.coding, true):
+            return "打开编码空间"
+        case (.coding, false):
+            return "先居中；再次激活可打开编码空间"
+        case (.newSpace, true):
+            return "创建编码空间"
+        case (.newSpace, false):
+            return "先居中；再次激活可创建编码空间"
         }
     }
 }

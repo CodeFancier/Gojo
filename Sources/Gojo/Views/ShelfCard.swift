@@ -3,6 +3,8 @@ import GojoCore
 
 /// 展示柜卡片。焦点态放大发光 + 成员缩略墙；侧卡态缩小去饱和只留名字。
 struct ShelfCard: View {
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     let item: ShelfItem
     let focused: Bool
     /// 编码空间成员（仅 .coding 用）
@@ -52,7 +54,9 @@ struct ShelfCard: View {
             }
             if focused {
                 subtitle
-                thumbnailWall
+                if !dynamicTypeSize.isAccessibilitySize {
+                    thumbnailWall
+                }
                 Spacer(minLength: 0)
             }
         }
@@ -105,11 +109,11 @@ struct ShelfCard: View {
             Image(systemName: "plus")
                 .font(.system(size: focused ? 30 : 22, weight: .semibold))
                 .foregroundStyle(Color.lightBlue)
-            if focused {
-                Text("新建编码空间")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color.textTertiary)
-            }
+            Text("新建编码空间")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color.textTertiary)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -124,7 +128,7 @@ struct ShelfCard: View {
     private var cardBackground: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(focused
-                  ? LinearGradient(colors: [Color.coreBlue.opacity(0.16), Color.white.opacity(0.05)],
+                  ? LinearGradient(colors: [Color.coreBlue.opacity(0.16), Color.surface],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                   : LinearGradient(colors: [Color.surface, Color.surface],
                                    startPoint: .top, endPoint: .bottom))
