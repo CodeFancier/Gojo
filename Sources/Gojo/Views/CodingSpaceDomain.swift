@@ -1,13 +1,13 @@
 import SwiftUI
 import GojoCore
 
-/// 编码空间领域：顶栏（返回 + 名 + 终端/访达）、成员网格、底部公共项目托盘。
+/// 编码空间领域：顶栏（返回 + 名 + 终端/访达）和成员网格。
 struct CodingSpaceDomain: View {
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let space: URL
 
-    @State private var draggingProjectId: UUID?
+    @Binding var draggingProjectId: UUID?
     @State private var movingFolder: String?
 
     private let columns = [GridItem(.adaptive(minimum: 168, maximum: 220), spacing: 12, alignment: .top)]
@@ -16,14 +16,14 @@ struct CodingSpaceDomain: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DomainTopBar(title: space.lastPathComponent)
+            DomainTopBar(title: space.lastPathComponent, memoryURL: space)
 
             ZStack(alignment: .top) {
                 ScrollView {
                     let members = state.members(in: space)
                     if members.isEmpty {
-                        Text("空间里还没有仓库，从下方托盘拖入公共项目，或在访达里放入现有仓库")
-                            .font(.system(size: 12)).foregroundStyle(Color(white: 0.5))
+                        Text("空间里还没有仓库，从下方公共项目栏拖入项目，或在访达里放入现有仓库")
+                            .font(.system(size: 12)).foregroundStyle(Color.textMuted)
                             .frame(maxWidth: .infinity).padding(.top, 60)
                     } else {
                         LazyVGrid(columns: columns, alignment: .leading, spacing: 12) {
@@ -45,10 +45,10 @@ struct CodingSpaceDomain: View {
                     DropZones(draggingProjectId: id,
                               onDrop: { pid, mode in
                                   state.addPublicToSpace(space, projectId: pid, mode: mode)
-                                  withAnimation(Motion.dropZone) { draggingProjectId = nil }
+                                  withAnimation(reduceMotion ? nil : Motion.dropZone) { draggingProjectId = nil }
                               },
                               onDismiss: {
-                                  withAnimation(Motion.dropZone) { draggingProjectId = nil }
+                                  withAnimation(reduceMotion ? nil : Motion.dropZone) { draggingProjectId = nil }
                               })
                 }
 
@@ -60,9 +60,6 @@ struct CodingSpaceDomain: View {
                 }
             }
 
-            ProjectTray(space: space) { id in
-                withAnimation(Motion.dropZone) { draggingProjectId = id }
-            }
         }
         .background(DomainBackground())
     }
@@ -84,7 +81,7 @@ private struct MoveTargets: View {
     var body: some View {
         VStack(spacing: 10) {
             Text("拖到其他编码空间移动").font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(white: 0.7))
+                .foregroundStyle(Color.textTertiary)
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(targets, id: \.self) { target in
@@ -96,9 +93,9 @@ private struct MoveTargets: View {
         }
         .padding(.vertical, 16)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial)
+        .background(Color.chrome.opacity(0.96))
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+            Rectangle().fill(Color.hairline).frame(height: 1)
         }
         .onAppear {
             monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseUp) { e in
@@ -151,6 +148,8 @@ struct DomainTopBar: View {
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
+    /// 传入则在顶栏显示该目录（编码空间根）的 Claude/Codex 记忆入口。
+    var memoryURL: URL? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -163,12 +162,16 @@ struct DomainTopBar: View {
 
             Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
             Spacer()
+            if let url = memoryURL {
+                AgentMemoryButtons(projectURL: url, displayName: title, compact: false)
+            }
             ToolbarButtons()
         }
-        .padding(.horizontal, 14).padding(.vertical, 10)
-        .background(.ultraThinMaterial)
+        // 隐藏标题栏后红绿灯浮于左上，leading 让位避免压住返回按钮。
+        .padding(.leading, 78).padding(.trailing, 14).padding(.vertical, 10)
+        .background(Color.chrome)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+            Rectangle().fill(Color.hairline).frame(height: 1)
         }
     }
 }

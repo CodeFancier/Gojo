@@ -4,14 +4,38 @@ import GojoCore
 struct ContentView: View {
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var draggingPublicProjectId: UUID?
 
     var body: some View {
         ZStack {
             DomainBackground()
-            content
+            VStack(spacing: 0) {
+                content
+
+                if let mode = publicBarMode {
+                    PersistentPublicSpaceBar(
+                        mode: mode,
+                        onOpen: openPublicSpace,
+                        onDragProject: beginPublicProjectDrag
+                    )
+                    .transition(.opacity)
+                }
+            }
         }
         .frame(minWidth: 720, minHeight: 460)
+        // 全程深色渐变 UI，强制深色外观：否则浅色系统模式下所有默认控件
+        // （工具栏图标、菜单、返回箭头、省略号）会渲染成深色，压在深底上看不清。
+        .preferredColorScheme(.dark)
+        .tint(.lightBlue)
         .animation(reduceMotion ? nil : Motion.domain, value: state.route)
+        .onChange(of: state.route) { route in
+            switch route {
+            case .codingSpace, .shelfDropping:
+                break
+            case .shelf, .publicSpace:
+                draggingPublicProjectId = nil
+            }
+        }
         .alert("操作失败", isPresented: Binding(
             get: { state.errorMessage != nil },
             set: { if !$0 { state.errorMessage = nil } })) {
@@ -26,10 +50,40 @@ struct ContentView: View {
         case .publicSpace:
             PublicSpaceDomain().transition(domainTransition)
         case .codingSpace(let u):
-            CodingSpaceDomain(space: u).transition(domainTransition)
+            CodingSpaceDomain(space: u, draggingProjectId: $draggingPublicProjectId)
+                .transition(domainTransition)
         case .shelfDropping(let source, _):
             // 拖拽期不会切到此分支（投放覆盖层留在领域内），保留作防御性映射。
-            CodingSpaceDomain(space: source).transition(domainTransition)
+            CodingSpaceDomain(space: source, draggingProjectId: $draggingPublicProjectId)
+                .transition(domainTransition)
+        }
+    }
+
+    private var publicBarMode: PublicSpaceBarMode? {
+        switch state.route {
+        case .shelf:
+            .summary
+        case .codingSpace, .shelfDropping:
+            .searchable
+        case .publicSpace:
+            nil
+        }
+    }
+
+    private func openPublicSpace() {
+        withAnimation(reduceMotion ? nil : Motion.domain) {
+            state.route = .publicSpace
+        }
+    }
+
+    private func beginPublicProjectDrag(_ id: UUID) {
+        switch state.route {
+        case .codingSpace, .shelfDropping:
+            withAnimation(reduceMotion ? nil : Motion.dropZone) {
+                draggingPublicProjectId = id
+            }
+        case .shelf, .publicSpace:
+            break
         }
     }
 
