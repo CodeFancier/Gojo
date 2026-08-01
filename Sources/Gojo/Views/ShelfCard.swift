@@ -1,13 +1,6 @@
 import SwiftUI
 import GojoCore
 
-/// 展示柜里的一项：公共空间（首位）、编码空间、新建卡（末位）。
-enum ShelfItem: Hashable {
-    case publicSpace
-    case coding(URL)
-    case newSpace
-}
-
 /// 展示柜卡片。焦点态放大发光 + 成员缩略墙；侧卡态缩小去饱和只留名字。
 struct ShelfCard: View {
     let item: ShelfItem
@@ -20,8 +13,7 @@ struct ShelfCard: View {
 
     private var title: String {
         switch item {
-        case .publicSpace: return "公共空间"
-        case .coding(let u): return u.lastPathComponent
+        case .coding(let url): return url.lastPathComponent
         case .newSpace: return "新建编码空间"
         }
     }
@@ -45,22 +37,22 @@ struct ShelfCard: View {
         }
     }
 
-    // MARK: 空间卡（公共空间 / 编码空间）
+    // MARK: 编码空间卡
 
     private var spaceCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: item == .publicSpace ? "globe" : "shippingbox.fill")
-                    .font(.system(size: 20))
-                    .foregroundStyle(item == .publicSpace ? Color.lightBlue : Color(white: 0.85))
+            Label {
                 Text(title)
-                    .font(.system(size: focused ? 17 : 13, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .font(.headline)
+                    .foregroundStyle(Color.textPrimary)
                     .lineLimit(1)
+            } icon: {
+                Image(systemName: "shippingbox.fill")
+                    .foregroundStyle(Color.textSecondary)
             }
             if focused {
                 subtitle
-                if case .coding = item { thumbnailWall }
+                thumbnailWall
                 Spacer(minLength: 0)
             }
         }
@@ -72,17 +64,10 @@ struct ShelfCard: View {
                 radius: focused ? 22 : 0, y: 8)
     }
 
-    @ViewBuilder private var subtitle: some View {
-        switch item {
-        case .coding:
-            Text("\(members.count) 个仓库")
-                .font(.system(size: 11.5)).foregroundStyle(Color(white: 0.6))
-        case .publicSpace:
-            Text("拖项目到编码空间使用")
-                .font(.system(size: 11.5)).foregroundStyle(Color(white: 0.6))
-        case .newSpace:
-            EmptyView()
-        }
+    private var subtitle: some View {
+        Text("\(members.count) 个仓库")
+            .font(.subheadline)
+            .foregroundStyle(Color.textTertiary)
     }
 
     /// 成员缩略墙：图标 + 文件夹名小胶囊，超出收 +N。
@@ -94,21 +79,21 @@ struct ShelfCard: View {
             ForEach(Array(shown), id: \.folderName) { m in
                 HStack(spacing: 4) {
                     SourceBadgeIcon(kind: SourceIconKind(m.form), size: 14,
-                                    badgeBackground: Color(white: 0.16))
+                                    badgeBackground: Color.chrome)
                     Text(m.folderName)
                         .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(Color(white: 0.78))
+                        .foregroundStyle(Color.textSecondary)
                         .lineLimit(1)
                 }
                 .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(Color.white.opacity(0.06), in: Capsule())
+                .background(Color.surface, in: Capsule())
             }
             if extra > 0 {
                 Text("+\(extra)")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(Color(white: 0.6))
+                    .foregroundStyle(Color.textTertiary)
                     .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(Color.white.opacity(0.06), in: Capsule())
+                    .background(Color.surface, in: Capsule())
             }
         }
     }
@@ -123,12 +108,12 @@ struct ShelfCard: View {
             if focused {
                 Text("新建编码空间")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Color(white: 0.7))
+                    .foregroundStyle(Color.textTertiary)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color.white.opacity(0.04)))
+            .fill(Color.surface))
         .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
             .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [6, 4]))
             .foregroundStyle(Color.lightBlue.opacity(focused ? 0.6 : 0.3)))
@@ -141,13 +126,13 @@ struct ShelfCard: View {
             .fill(focused
                   ? LinearGradient(colors: [Color.coreBlue.opacity(0.16), Color.white.opacity(0.05)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
-                  : LinearGradient(colors: [Color.white.opacity(0.055), Color.white.opacity(0.055)],
+                  : LinearGradient(colors: [Color.surface, Color.surface],
                                    startPoint: .top, endPoint: .bottom))
     }
 
     private var cardBorder: some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(focused ? Color.lightBlue.opacity(0.45) : Color.white.opacity(0.10),
+            .strokeBorder(focused ? Color.lightBlue.opacity(0.45) : Color.cardStroke,
                           lineWidth: 1)
     }
 }
