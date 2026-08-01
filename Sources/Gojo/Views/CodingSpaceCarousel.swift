@@ -39,18 +39,22 @@ struct CodingSpaceCarousel: View {
                 // 卡片滚动区与圆点区分配独立高度，极窄高度下也不会互相覆盖。
                 let dotAreaHeight: CGFloat = 26
                 let cardAreaHeight = max(0, geo.size.height - dotAreaHeight)
+                let metrics = CarouselCardMetrics.calculate(
+                    viewportWidth: geo.size.width,
+                    availableHeight: cardAreaHeight
+                )
                 ScrollViewReader { proxy in
                     VStack(spacing: 0) {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 14) {
+                            HStack(spacing: metrics.spacing) {
                                 ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
-                                    card(idx, item, proxy: proxy)
+                                    card(idx, item, proxy: proxy, metrics: metrics)
                                         .id(idx)
                                         .background(reporter(idx))
                                 }
                             }
                             .frame(minHeight: cardAreaHeight)
-                            .padding(.horizontal, viewportCenterX - 120)
+                            .padding(.horizontal, metrics.horizontalInset)
                         }
                         .frame(height: cardAreaHeight)
 
@@ -85,7 +89,12 @@ struct CodingSpaceCarousel: View {
     // MARK: 卡片
 
     @ViewBuilder
-    private func card(_ idx: Int, _ item: ShelfItem, proxy: ScrollViewProxy) -> some View {
+    private func card(
+        _ idx: Int,
+        _ item: ShelfItem,
+        proxy: ScrollViewProxy,
+        metrics: CarouselCardMetrics
+    ) -> some View {
         let focused = idx == focusIndex
         let members: [ScannedMember] = {
             if case .coding(let url) = item {
@@ -97,7 +106,14 @@ struct CodingSpaceCarousel: View {
             // 未居中的卡：先滑到中央聚焦；已居中的卡：再激活才进入领域。
             focused ? enter(item) : centerCard(idx, proxy: proxy)
         } label: {
-            ShelfCard(item: item, focused: focused, members: members, reduceMotion: reduceMotion)
+            ShelfCard(
+                item: item,
+                focused: focused,
+                focusedSize: metrics.focusedSize,
+                sideSize: metrics.sideSize,
+                members: members,
+                reduceMotion: reduceMotion
+            )
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel(for: item))

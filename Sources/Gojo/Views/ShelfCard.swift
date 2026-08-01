@@ -7,6 +7,8 @@ struct ShelfCard: View {
 
     let item: ShelfItem
     let focused: Bool
+    let focusedSize: CGSize
+    let sideSize: CGSize
     /// 编码空间成员（仅 .coding 用）
     var members: [ScannedMember] = []
     var reduceMotion: Bool = false
@@ -21,18 +23,19 @@ struct ShelfCard: View {
     }
 
     var body: some View {
+        let size = focused ? focusedSize : sideSize
+
         Group {
             switch item {
             case .newSpace: newCard
             default:        spaceCard
             }
         }
-        .frame(width: focused ? 240 : 150, height: focused ? 200 : 150)
-        .scaleEffect(focused ? 1 : 0.9)
+        .frame(width: size.width, height: size.height)
         .opacity(focused ? 1 : 0.42)
         .saturation(focused ? 1 : 0.5)
         .offset(y: (focused && breathe && !reduceMotion) ? -4 : 0)
-        .animation(reduceMotion ? nil : Motion.domain, value: focused)
+        .animation(reduceMotion ? nil : Motion.domain, value: size)
         .onAppear {
             guard !reduceMotion else { return }
             withAnimation(Motion.breathe) { breathe = true }
