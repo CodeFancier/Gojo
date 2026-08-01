@@ -35,6 +35,8 @@ struct CodingSpaceCarousel: View {
 
             GeometryReader { geo in
                 let viewportCenterX = geo.size.width / 2
+                // 200pt 焦点卡 + 20pt 底部留白 + 32pt 圆点区；最小窗口也不会挤到圆点。
+                let topPadding = min(52, max(24, geo.size.height - 252))
                 ScrollViewReader { proxy in
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 14) {
@@ -45,9 +47,8 @@ struct CodingSpaceCarousel: View {
                             }
                         }
                         .padding(.horizontal, viewportCenterX - 120)
-                        // 上多下少：把卡片整体从中上方下移到视觉中心偏下，给顶部字标留白。
-                        .padding(.top, 96)
-                        .padding(.bottom, 44)
+                        .padding(.top, topPadding)
+                        .padding(.bottom, 20)
                     }
                     .onPreferenceChange(CardCenterKey.self) { centers in
                         // 居中动画期间焦点已锁定目标卡，避免中途“最近卡”抢焦点致放大闪烁。
