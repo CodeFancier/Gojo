@@ -23,6 +23,27 @@ struct ContentView: View {
             }
         }
         .frame(minWidth: 720, minHeight: 460)
+        .overlay(alignment: .bottom) {
+            if let space = activeCodingSpace, let id = draggingPublicProjectId {
+                DropZones(
+                    draggingProjectId: id,
+                    onDrop: { projectId, mode in
+                        state.addPublicToSpace(space, projectId: projectId, mode: mode)
+                        withAnimation(reduceMotion ? nil : Motion.dropZone) {
+                            draggingPublicProjectId = nil
+                        }
+                    },
+                    onDismiss: {
+                        withAnimation(reduceMotion ? nil : Motion.dropZone) {
+                            draggingPublicProjectId = nil
+                        }
+                    }
+                )
+                .padding(.horizontal, 16)
+                .transition(.opacity)
+                .zIndex(1)
+            }
+        }
         // 全程深色渐变 UI，强制深色外观：否则浅色系统模式下所有默认控件
         // （工具栏图标、菜单、返回箭头、省略号）会渲染成深色，压在深底上看不清。
         .preferredColorScheme(.dark)
@@ -66,6 +87,17 @@ struct ContentView: View {
         case .codingSpace, .shelfDropping:
             .searchable
         case .publicSpace:
+            nil
+        }
+    }
+
+    private var activeCodingSpace: URL? {
+        switch state.route {
+        case .codingSpace(let space):
+            space
+        case .shelfDropping(let source, _):
+            source
+        case .shelf, .publicSpace:
             nil
         }
     }

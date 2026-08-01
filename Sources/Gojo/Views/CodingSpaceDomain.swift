@@ -16,7 +16,7 @@ struct CodingSpaceDomain: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DomainTopBar(title: space.lastPathComponent, memoryURL: space)
+            DomainTopBar(title: space.lastPathComponent)
 
             ZStack(alignment: .top) {
                 ScrollView {
@@ -40,17 +40,6 @@ struct CodingSpaceDomain: View {
                     }
                 }
                 .opacity(draggingProjectId == nil ? 1 : 0.35)
-
-                if let id = draggingProjectId {
-                    DropZones(draggingProjectId: id,
-                              onDrop: { pid, mode in
-                                  state.addPublicToSpace(space, projectId: pid, mode: mode)
-                                  withAnimation(reduceMotion ? nil : Motion.dropZone) { draggingProjectId = nil }
-                              },
-                              onDismiss: {
-                                  withAnimation(reduceMotion ? nil : Motion.dropZone) { draggingProjectId = nil }
-                              })
-                }
 
                 if movingFolder != nil {
                     MoveTargets(source: space, targets: otherSpaces,
@@ -148,8 +137,6 @@ struct DomainTopBar: View {
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
-    /// 传入则在顶栏显示该目录（编码空间根）的 Claude/Codex 记忆入口。
-    var memoryURL: URL? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -162,16 +149,12 @@ struct DomainTopBar: View {
 
             Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
             Spacer()
-            if let url = memoryURL {
-                AgentMemoryButtons(projectURL: url, displayName: title, compact: false)
-            }
             ToolbarButtons()
         }
-        // 隐藏标题栏后红绿灯浮于左上，leading 让位避免压住返回按钮。
-        .padding(.leading, 78).padding(.trailing, 14).padding(.vertical, 10)
-        .background(Color.chrome)
+        .padding(.horizontal, 14).padding(.vertical, 10)
+        .background(.ultraThinMaterial)
         .overlay(alignment: .bottom) {
-            Rectangle().fill(Color.hairline).frame(height: 1)
+            Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
         }
     }
 }

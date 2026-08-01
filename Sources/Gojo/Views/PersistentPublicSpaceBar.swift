@@ -92,7 +92,7 @@ struct PersistentPublicSpaceBar: View {
                     .foregroundStyle(Color.textTertiary)
             }
 
-            if state.publicSpaceFolder != nil, !state.publicProjects.isEmpty {
+            if state.publicSpaceFolder != nil {
                 TextField("搜索公共项目", text: $query)
                     .textFieldStyle(.plain)
                     .font(.body)
@@ -102,7 +102,9 @@ struct PersistentPublicSpaceBar: View {
                     .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.publicStroke))
                     .accessibilityLabel("搜索公共项目")
 
-                if visibleProjects.isEmpty {
+                if state.publicProjects.isEmpty {
+                    EmptyView()
+                } else if visibleProjects.isEmpty {
                     Text("没有匹配的公共项目")
                         .font(.callout)
                         .foregroundStyle(Color.textTertiary)
@@ -145,5 +147,8 @@ struct PersistentPublicSpaceBar: View {
             onDragProject(project.id)
             return NSItemProvider(object: DragPayload.publicProject(project.id) as NSString)
         }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(project.name)，\(project.url)")
+        .accessibilityHint("拖动到 Git 克隆或软链接投放区")
     }
 }
