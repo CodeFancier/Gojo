@@ -15,6 +15,7 @@ struct FocuslessArrowKeyReceiver: NSViewRepresentable {
 
     private final class ArrowKeyReceiverView: NSView {
         var onMove: (Int) -> Void
+        private var localMonitor: Any?
 
         init(onMove: @escaping (Int) -> Void) {
             self.onMove = onMove
@@ -26,27 +27,56 @@ struct FocuslessArrowKeyReceiver: NSViewRepresentable {
             fatalError("init(coder:) has not been implemented")
         }
 
-        override var acceptsFirstResponder: Bool { true }
+        deinit {
+            removeLocalMonitor()
+        }
 
         override func isAccessibilityElement() -> Bool {
             false
         }
 
+        override func viewWillMove(toWindow newWindow: NSWindow?) {
+            removeLocalMonitor()
+            super.viewWillMove(toWindow: newWindow)
+        }
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             focusRingType = .none
-            DispatchQueue.main.async { [weak self] in
-                guard let self, self.window != nil else { return }
-                self.window?.makeFirstResponder(self)
+            guard let window else { return }
+            installLocalMonitor(for: window)
+        }
+
+        private func installLocalMonitor(for window: NSWindow) {
+            guard localMonitor == nil else { return }
+            localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak window] event in
+                guard let self, let window,
+                      let delta = CarouselKeyboardNavigation.delta(forKeyCode: event.keyCode),
+                      CarouselKeyboardNavigation.shouldHandleArrowKey(
+                          forKeyCode: event.keyCode,
+                          isEventInReceiverWindow: event.window === window,
+                          isReceiverWindowKey: NSApp.keyWindow === window,
+                          isApplicationActive: NSApp.isActive,
+                          hasAttachedSheet: window.attachedSheet != nil,
+                          hasModalWindow: NSApp.modalWindow != nil,
+                          isTextEditing: isTextEditing(window.firstResponder)
+                      ) else {
+                    return event
+                }
+                self.onMove(delta)
+                return nil
             }
         }
 
-        override func keyDown(with event: NSEvent) {
-            guard let delta = CarouselKeyboardNavigation.delta(forKeyCode: event.keyCode) else {
-                super.keyDown(with: event)
-                return
+        private func removeLocalMonitor() {
+            if let localMonitor {
+                NSEvent.removeMonitor(localMonitor)
+                self.localMonitor = nil
             }
-            onMove(delta)
+        }
+
+        private func isTextEditing(_ responder: NSResponder?) -> Bool {
+            responder is NSTextView || responder is NSTextField
         }
     }
 }

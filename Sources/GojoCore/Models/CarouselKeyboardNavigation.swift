@@ -6,4 +6,22 @@ public enum CarouselKeyboardNavigation {
         default: nil
         }
     }
+
+    public static func shouldHandleArrowKey(
+        forKeyCode keyCode: UInt16,
+        isEventInReceiverWindow: Bool,
+        isReceiverWindowKey: Bool,
+        isApplicationActive: Bool,
+        hasAttachedSheet: Bool,
+        hasModalWindow: Bool,
+        isTextEditing: Bool
+    ) -> Bool {
+        delta(forKeyCode: keyCode) != nil
+            && isEventInReceiverWindow
+            && isReceiverWindowKey
+            && isApplicationActive
+            && !hasAttachedSheet
+            && !hasModalWindow
+            && !isTextEditing
+    }
 }
