@@ -14,11 +14,17 @@ struct FocuslessArrowKeyReceiver: NSViewRepresentable {
     }
 
     private final class ArrowKeyReceiverView: NSView {
-        var onMove: (Int) -> Void
+        var onMove: (Int) -> Void {
+            didSet {
+                keyEventMonitor.onMove = onMove
+            }
+        }
+        private let keyEventMonitor: CarouselKeyEventMonitor
         private var localMonitor: Any?
 
         init(onMove: @escaping (Int) -> Void) {
             self.onMove = onMove
+            self.keyEventMonitor = CarouselKeyEventMonitor(onMove: onMove)
             super.init(frame: .zero)
         }
 
@@ -50,21 +56,19 @@ struct FocuslessArrowKeyReceiver: NSViewRepresentable {
         private func installLocalMonitor(for window: NSWindow) {
             guard localMonitor == nil else { return }
             localMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self, weak window] event in
-                guard let self, let window,
-                      let delta = CarouselKeyboardNavigation.delta(forKeyCode: event.keyCode),
-                      CarouselKeyboardNavigation.shouldHandleArrowKey(
-                          forKeyCode: event.keyCode,
-                          isEventInReceiverWindow: event.window === window,
-                          isReceiverWindowKey: NSApp.keyWindow === window,
-                          isApplicationActive: NSApp.isActive,
-                          hasAttachedSheet: window.attachedSheet != nil,
-                          hasModalWindow: NSApp.modalWindow != nil,
-                          isTextEditing: isTextEditing(window.firstResponder)
-                      ) else {
+                guard let self, let window else {
                     return event
                 }
-                self.onMove(delta)
-                return nil
+                let isAllowed = CarouselKeyboardNavigation.shouldHandleArrowKey(
+                    forKeyCode: event.keyCode,
+                    isEventInReceiverWindow: event.window === window,
+                    isReceiverWindowKey: NSApp.keyWindow === window,
+                    isApplicationActive: NSApp.isActive,
+                    hasAttachedSheet: window.attachedSheet != nil,
+                    hasModalWindow: NSApp.modalWindow != nil,
+                    isTextEditing: isTextEditing(window.firstResponder)
+                )
+                return self.keyEventMonitor.handle(event, isAllowed: isAllowed)
             }
         }
 

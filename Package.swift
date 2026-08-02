@@ -16,5 +16,6 @@ let package = Package(
             ]
         ),
         .testTarget(name: "GojoCoreTests", dependencies: ["GojoCore"]),
+        .testTarget(name: "GojoTests", dependencies: ["Gojo"]),
     ]
 )
