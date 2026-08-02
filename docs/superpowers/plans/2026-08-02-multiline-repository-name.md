@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Show coding-space repository names across up to three natural text lines instead of truncating them to one line.
+**Goal:** Show coding-space repository names across as many natural text lines as needed instead of truncating them.
 
 **Architecture:** Keep the existing adaptive `220...280pt` member grid and change only `MemberCard`'s repository-name presentation. Let the text accept vertical growth within its proposed card width, and use the native macOS help tooltip as a complete-name fallback for exceptionally long names.
 
@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Keep member-card widths adaptive from `220pt` through `280pt`.
-- Repository names wrap naturally for at most 3 visible lines and do not reserve unused line height for short names.
+- Repository names wrap naturally without a line limit and do not reserve unused line height for short names.
 - The complete repository name is available from a native hover help tooltip.
 - Preserve branch text, source icon, Agent Memory controls, hover action bar, context menu, drag behavior, VoiceOver, and Reduce Motion.
 - Do not add dependencies or raise the macOS 13 deployment target.
@@ -26,7 +26,7 @@
 
 **Interfaces:**
 - Consumes: the grid's existing `220...280pt` width proposal.
-- Produces: a repository-name `Text` with up to three natural lines and full-name help text.
+- Produces: a repository-name `Text` with unlimited natural lines and full-name help text.
 
 - [ ] **Step 1: Update the repository-name text layout**
 
@@ -36,12 +36,11 @@ Change only the repository-name modifier chain:
 Text(member.folderName)
     .font(.system(size: 13, weight: .semibold))
     .foregroundStyle(.white)
-    .lineLimit(3)
     .fixedSize(horizontal: false, vertical: true)
     .help(member.folderName)
 ```
 
-Remove `.truncationMode(.middle)`. Do not reserve three lines with `reservesSpace`, because short names must keep their compact height.
+Remove `.lineLimit(1)` and `.truncationMode(.middle)` without adding another line limit. Do not reserve a fixed number of lines, because short names must keep their compact height.
 
 - [ ] **Step 2: Align variable-height card headers from the top**
 
@@ -85,7 +84,7 @@ payment-platform-cross-border-reconciliation-service
 At a 720pt window, verify:
 
 - the short name remains one line without blank reserved rows;
-- the long name wraps to 2–3 lines without middle ellipsis;
+- the long name wraps to every line it needs without an ellipsis;
 - hovering the long name exposes its complete text;
 - three columns remain horizontally unclipped;
 - branch, memory controls, hover actions, context menu, and drag remain reachable.
