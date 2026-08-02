@@ -4,11 +4,16 @@ import SwiftUI
 struct ShelfView: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .headline) private var carouselTitleLineHeight: CGFloat = 24
+    @ScaledMetric(relativeTo: .caption) private var authorLineHeight: CGFloat = 16
 
     private let wordmarkClearance: CGFloat = 48
-    private let authorClearance: CGFloat = 28
+    private let authorBottomPadding: CGFloat = 12
     private let minimumFocusedCardHeight: CGFloat = 180
     private let paginationHeight: CGFloat = 26
+
+    private var authorClearance: CGFloat {
+        authorLineHeight + authorBottomPadding
+    }
 
     private var minimumAccessibleHeight: CGFloat {
         wordmarkClearance
@@ -30,7 +35,7 @@ struct ShelfView: View {
             .overlay(alignment: .bottomTrailing) {
                 AuthorCredit()
                     .padding(.trailing, 16)
-                    .padding(.bottom, 12)
+                    .padding(.bottom, authorBottomPadding)
             }
     }
 
