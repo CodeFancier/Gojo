@@ -60,7 +60,11 @@ struct CodingSpaceCarousel: View {
 
                         dots.frame(height: dotAreaHeight)
                     }
-                    .focusable()
+                    .background {
+                        FocuslessArrowKeyReceiver { delta in
+                            step(delta, proxy: proxy)
+                        }
+                    }
                     .onPreferenceChange(CardCenterKey.self) { centers in
                         // 居中动画期间焦点已锁定目标卡，避免中途“最近卡”抢焦点致放大闪烁。
                         guard !scrollLock else { return }
@@ -69,16 +73,6 @@ struct CodingSpaceCarousel: View {
                                                               viewportCenterX: viewportCenterX),
                            i != focusIndex {
                             focusIndex = i
-                        }
-                    }
-                    .onMoveCommand { direction in
-                        switch direction {
-                        case .left:
-                            step(-1, proxy: proxy)
-                        case .right:
-                            step(1, proxy: proxy)
-                        default:
-                            break
                         }
                     }
                 }
