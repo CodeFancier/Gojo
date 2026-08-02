@@ -26,14 +26,14 @@ struct MemberCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
                 icon
                 VStack(alignment: .leading, spacing: 3) {
                     Text(member.folderName)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .help(member.folderName)
                     if let b = member.branch {
                         Text(b).font(.system(size: 10.5, design: .monospaced))
                             .foregroundStyle(Color(white: 0.55)).lineLimit(1)
