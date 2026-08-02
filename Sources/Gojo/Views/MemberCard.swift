@@ -31,7 +31,9 @@ struct MemberCard: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(member.folderName)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white).lineLimit(1)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                     if let b = member.branch {
                         Text(b).font(.system(size: 10.5, design: .monospaced))
                             .foregroundStyle(Color(white: 0.55)).lineLimit(1)
@@ -46,7 +48,7 @@ struct MemberCard: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
-        .frame(width: 168, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
             .fill(Color.white.opacity(0.055)))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)

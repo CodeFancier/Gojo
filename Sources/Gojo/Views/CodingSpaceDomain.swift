@@ -10,7 +10,9 @@ struct CodingSpaceDomain: View {
     @Binding var draggingProjectId: UUID?
     @State private var movingFolder: String?
 
-    private let columns = [GridItem(.adaptive(minimum: 168, maximum: 220), spacing: 12, alignment: .top)]
+    private let columns = [
+        GridItem(.adaptive(minimum: 220, maximum: 280), spacing: 12, alignment: .top)
+    ]
 
     private var otherSpaces: [URL] { state.codingSpaces.filter { $0 != space } }
 
