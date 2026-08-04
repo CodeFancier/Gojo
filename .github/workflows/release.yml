@@ -1,0 +1,40 @@
+# 发布 macOS 发行版：推送 v* 形式的 tag 时，在 macOS runner 上
+# 构建 .app、打包 .dmg，并创建 GitHub Release 上传产物。
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# 创建 Release 需要写仓库内容权限
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 构建 .app 并打包 .dmg
+        # 复用仓库脚本：swift build -c release → 组装 Gojo.app（ad-hoc 签名）→ 生成 Gojo.dmg
+        run: ./Scripts/make-dmg.sh
+
+      - name: 创建 Release 并上传 .dmg
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"          # 如 v0.1.0
+          VERSION="${TAG#v}"                # 如 0.1.0
+          ASSET="Gojo-${VERSION}.dmg"
+          mv Gojo.dmg "$ASSET"
+
+          gh release create "$TAG" "$ASSET" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Gojo $TAG" \
+            --generate-notes \
+            --verify-tag
