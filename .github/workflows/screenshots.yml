@@ -1,0 +1,57 @@
+# 在云端 macOS runner 上构建 Gojo、预置演示数据并自动截取真实界面图。
+# 产物作为 artifact 上传，用于公众号文章配图。
+#
+# 触发：
+#   - workflow_dispatch：Actions 页面手动触发（推荐）
+#   - push 到 main 且仅改动截图相关文件：方便调试迭代
+name: Screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/screenshots.yml'
+      - 'Scripts/seed-demo-data.sh'
+      - 'Scripts/screenshot-demo.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  shoot:
+    runs-on: macos-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 脚本可执行权限
+        run: chmod +x Scripts/*.sh
+
+      - name: 构建 Gojo.app
+        run: ./Scripts/package-app.sh
+
+      - name: 预置演示数据
+        run: ./Scripts/seed-demo-data.sh
+
+      - name: 截图
+        run: ./Scripts/screenshot-demo.sh screenshots
+
+      - name: 上传截图
+        uses: actions/upload-artifact@v4
+        with:
+          name: gojo-screenshots
+          path: screenshots/
+          if-no-files-found: error
+
+      - name: 诊断信息（失败时排查用）
+        if: always()
+        run: |
+          echo "=== Gojo 可执行 ==="; ls -la build/Gojo.app/Contents/MacOS/ 2>/dev/null || true
+          echo "=== 进程 ==="; ps aux | grep -i "[G]ojo" || true
+          echo "=== index.json ==="; cat "$HOME/Library/Application Support/Gojo/index.json" 2>/dev/null || true
+          echo "=== 公共空间 ==="; ls -la "$HOME/GojoDemo/PublicSpace" 2>/dev/null || true
+          echo "=== 各空间成员 ==="; ls -la "$HOME/GojoDemo/spaces"/*/ 2>/dev/null || true
+          echo "=== 截图目录 ==="; ls -la screenshots/ 2>/dev/null || true
