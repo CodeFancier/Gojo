@@ -13,7 +13,7 @@ struct ContentView: View {
             routedLayout
         }
         .frame(minWidth: 720, minHeight: 460)
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: .top) {
             if let space = activeCodingSpace, let id = draggingPublicProjectId {
                 DropZones(
                     draggingProjectId: id,
@@ -30,7 +30,8 @@ struct ContentView: View {
                     }
                 )
                 .padding(.horizontal, 16)
-                .transition(.opacity)
+                .padding(.top, 48)
+                .transition(.move(edge: .top).combined(with: .opacity))
                 .zIndex(1)
             }
         }
@@ -52,6 +53,9 @@ struct ContentView: View {
             set: { if !$0 { state.errorMessage = nil } })) {
             Button("好") { state.errorMessage = nil }
         } message: { Text(state.errorMessage ?? "") }
+        .sheet(item: $state.codingSpaceDeletionSession) { _ in
+            CodingSpaceDeletionSheet()
+        }
     }
 
     @ViewBuilder private var routedLayout: some View {

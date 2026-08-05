@@ -5,6 +5,7 @@ import Foundation
 /// 公共项目 payload 即其 id 的 uuidString（含换行的成员格式天然不是合法 UUID）。
 public enum DragPayload {
     private static let memberPrefix = "gojo-member"
+    private static let codingSpacePrefix = "gojo-coding-space"
 
     public static func member(space: URL, folder: String) -> String {
         "\(memberPrefix)\n\(space.path)\n\(folder)"
@@ -23,5 +24,15 @@ public enum DragPayload {
 
     public static func parsePublicProject(_ s: String) -> UUID? {
         UUID(uuidString: s)
+    }
+
+    public static func codingSpace(_ space: URL) -> String {
+        "\(codingSpacePrefix)\n\(space.path)"
+    }
+
+    public static func parseCodingSpace(_ s: String) -> URL? {
+        let parts = s.components(separatedBy: "\n")
+        guard parts.count == 2, parts[0] == codingSpacePrefix else { return nil }
+        return URL(fileURLWithPath: parts[1])
     }
 }

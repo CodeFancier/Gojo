@@ -3,8 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # 全尺寸主图；16/32/64px 使用光学优化的小尺寸源以获得更清晰的剪影
-SVG_FULL="Gojo-Logo-Assets/gojo-logo.svg"
-SVG_SMALL="Gojo-Logo-Assets/gojo-logo-small.svg"
+SVG_FULL="BrandAssets/sources/logo/gojo-logo.svg"
+SVG_SMALL="BrandAssets/sources/logo/gojo-logo-small.svg"
 OUT="Sources/Gojo/Resources/Gojo.icns"
 ICONSET="$(mktemp -d)/Gojo.iconset"
 

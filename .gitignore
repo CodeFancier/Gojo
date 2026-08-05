@@ -31,3 +31,10 @@ docs/
 
 # Brainstorming visual companion artifacts
 .superpowers/
+
+# IDE
+.idea/
+
+# Agent tooling
+.agents/
+skills-lock.json

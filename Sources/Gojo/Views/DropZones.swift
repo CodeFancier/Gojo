@@ -46,7 +46,7 @@ struct DropZones: View {
         return VStack(spacing: 8) {
             Image(systemName: symbol).font(.system(size: 26)).foregroundStyle(tint)
             Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-            Text(desc).font(.system(size: 11)).foregroundStyle(Color(white: 0.6))
+            Text(desc).font(.system(size: 11)).foregroundStyle(Color.textTertiary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, minHeight: 150)

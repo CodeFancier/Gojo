@@ -13,7 +13,7 @@ struct SourceBadgeIcon: View {
     var body: some View {
         Image(systemName: kind.baseSymbol)
             .font(.system(size: size, weight: .regular))
-            .foregroundStyle(Color(white: 0.82))
+            .foregroundStyle(Color.textSecondary)
             .frame(width: size, height: size)
             .overlay(alignment: .bottomTrailing) {
                 if let badge = kind.badgeSymbol {

@@ -8,6 +8,12 @@ public enum WorkspaceError: Error, Equatable {
     case notASymlinkMember(String)
     case notAGitMember(String)
     case memberNameCollision(String)
+    case publicProjectNameCollision(String)
+    case publicProjectInUse(String)
+    case unsafePublicProjectPath(String)
+    case nestedPublicProjectNotFound(String)
+    case codingSpaceNotFound(String)
+    case unsafeCodingSpacePath(String)
 }
 
 public final class WorkspaceManager {
@@ -53,9 +59,36 @@ public final class WorkspaceManager {
             throw WorkspaceError.publicProjectNotFound(id)
         }
         let proj = m.projects[i]
-        try git.clone(url: proj.url, into: space.appendingPathComponent(proj.name))
+        try git.clone(url: proj.url, into: space.appendingPathComponent(proj.localRelativePath))
         m.projects[i].cloned = true
         try store.savePublicSpace(m, at: space)
+    }
+
+    /// 删除公共项目。仍被编码空间引用时拒绝操作；本地仓库移入废纸篓后再移除定义。
+    public func removePublicProject(id: UUID) throws {
+        let space = try publicSpaceURL()
+        var manifest = (try store.loadPublicSpace(at: space)) ?? PublicSpaceManifest()
+        guard let project = manifest.projects.first(where: { $0.id == id }) else {
+            throw WorkspaceError.publicProjectNotFound(id)
+        }
+
+        for codingSpace in codingSpaceURLs() {
+            let workspace = try store.loadWorkspace(at: codingSpace)
+            if workspace?.members.contains(where: { $0.publicProjectId == id }) == true {
+                throw WorkspaceError.publicProjectInUse(project.name)
+            }
+        }
+
+        let projectURL = space
+            .appendingPathComponent(project.localRelativePath)
+            .standardizedFileURL
+        try validatePublicProjectPath(projectURL, in: space)
+        if itemExists(at: projectURL) {
+            try fm.trashItem(at: projectURL, resultingItemURL: nil)
+        }
+
+        manifest.projects.removeAll { $0.id == id }
+        try store.savePublicSpace(manifest, at: space)
     }
 
     /// 合并清单与扫描：刷新 cloned 标志，补录扫描到但清单缺失的库；持久化后返回。
@@ -65,7 +98,7 @@ public final class WorkspaceManager {
 
         // 1) 刷新已有项的 cloned 状态
         for i in m.projects.indices {
-            let path = space.appendingPathComponent(m.projects[i].name).path
+            let path = space.appendingPathComponent(m.projects[i].localRelativePath).path
             m.projects[i].cloned = fm.fileExists(atPath: path)
         }
         // 2) 扫描补录：子目录含 .git 且清单无同名者
@@ -83,6 +116,83 @@ public final class WorkspaceManager {
         return m.projects.sorted { $0.name < $1.name }
     }
 
+    /// 扫描公共空间中所有可展开目录，以及其中直接包含的 Git 子项目。
+    /// 已登记且已落盘的公共项目即使没有子项目，也会作为可展开目录返回。
+    public func publicCompositeFolders() throws -> [PublicCompositeFolder] {
+        let space = try publicSpaceURL()
+        let manifest = (try store.loadPublicSpace(at: space)) ?? PublicSpaceManifest()
+        var registeredByPath: [String: UUID] = [:]
+        for project in manifest.projects {
+            registeredByPath[project.localRelativePath] = project.id
+        }
+
+        var candidates: [String: URL] = [:]
+        for folder in directoryEntries(at: space) where folder.lastPathComponent != ".gojo" {
+            candidates[folder.lastPathComponent] = folder
+        }
+        for project in manifest.projects {
+            let path = project.localRelativePath
+            let folder = space.appendingPathComponent(path)
+            if fm.fileExists(atPath: folder.path) {
+                candidates[path] = folder
+            }
+        }
+
+        return candidates.compactMap { relativePath, folder in
+            let projects = directoryEntries(at: folder).compactMap { child -> NestedPublicProject? in
+                guard fm.fileExists(atPath: child.appendingPathComponent(".git").path) else {
+                    return nil
+                }
+                let name = child.lastPathComponent
+                let childRelativePath = "\(relativePath)/\(name)"
+                return NestedPublicProject(
+                    parentRelativePath: relativePath,
+                    name: name,
+                    url: (try? git.remoteURL(at: child)) ?? "",
+                    publicProjectID: registeredByPath[childRelativePath]
+                )
+            }
+            let publicProjectID = registeredByPath[relativePath]
+            guard publicProjectID != nil || !projects.isEmpty else { return nil }
+            return PublicCompositeFolder(
+                name: folder.lastPathComponent,
+                relativePath: relativePath,
+                publicProjectID: publicProjectID,
+                projects: projects
+            )
+        }
+        .sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
+    }
+
+    /// 将嵌套仓库登记为公共项目。仓库保留原位，通过 relativePath 参与后续软链接和状态扫描。
+    public func promoteNestedPublicProject(parentRelativePath: String,
+                                           projectName: String) throws {
+        let relativePath = "\(parentRelativePath)/\(projectName)"
+        guard let nested = try publicCompositeFolders()
+            .first(where: { $0.relativePath == parentRelativePath })?
+            .projects.first(where: { $0.name == projectName }) else {
+            throw WorkspaceError.nestedPublicProjectNotFound(relativePath)
+        }
+
+        let space = try publicSpaceURL()
+        var manifest = (try store.loadPublicSpace(at: space)) ?? PublicSpaceManifest()
+        if manifest.projects.contains(where: { $0.localRelativePath == relativePath }) {
+            return
+        }
+        guard !manifest.projects.contains(where: { $0.name == projectName }) else {
+            throw WorkspaceError.publicProjectNameCollision(projectName)
+        }
+        manifest.projects.append(PublicProject(name: projectName, url: nested.url, cloned: true,
+                                               relativePath: relativePath))
+        try store.savePublicSpace(manifest, at: space)
+    }
+
+    public func promoteNestedPublicProject(parentFolderName: String,
+                                           projectName: String) throws {
+        try promoteNestedPublicProject(
+            parentRelativePath: parentFolderName, projectName: projectName)
+    }
+
     // MARK: - 编码空间
 
     public func createCodingSpace(name: String, at url: URL) throws {
@@ -91,6 +201,88 @@ public final class WorkspaceManager {
         var index = store.loadIndex()
         if !index.codingSpacePaths.contains(url.path) { index.codingSpacePaths.append(url.path) }
         try store.saveIndex(index)
+    }
+
+    public func codingSpaceURLs() -> [URL] {
+        store.loadIndex().codingSpacePaths.map(URL.init(fileURLWithPath:))
+    }
+
+    /// 从 Gojo 移除编码空间，并按选择决定是否同时清理磁盘内容。
+    public func removeCodingSpace(at codingSpace: URL,
+                                  mode: CodingSpaceRemovalMode) throws {
+        let normalizedSpace = codingSpace.standardizedFileURL
+        let normalizedPath = normalizedSpace.path
+        var index = store.loadIndex()
+        guard index.codingSpacePaths.contains(where: {
+            URL(fileURLWithPath: $0).standardizedFileURL.path == normalizedPath
+        }) else {
+            throw WorkspaceError.codingSpaceNotFound(codingSpace.path)
+        }
+
+        switch mode {
+        case .unregisterOnly:
+            break
+        case .contents:
+            try validateDestructiveCodingSpace(normalizedSpace)
+            if itemExists(at: normalizedSpace) {
+                let entries = try fm.contentsOfDirectory(
+                    at: normalizedSpace, includingPropertiesForKeys: nil)
+                for entry in entries {
+                    try fm.removeItem(at: entry)
+                }
+            }
+        case .directory:
+            try validateDestructiveCodingSpace(normalizedSpace)
+            if itemExists(at: normalizedSpace) {
+                try fm.removeItem(at: normalizedSpace)
+            }
+        }
+
+        index.codingSpacePaths.removeAll {
+            URL(fileURLWithPath: $0).standardizedFileURL.path == normalizedPath
+        }
+        try store.saveIndex(index)
+    }
+
+    /// 返回删除任务顺序：先列出直接子文件夹，最后是编码空间根文件夹。
+    public func codingSpaceRemovalItems(at codingSpace: URL) throws -> [CodingSpaceRemovalItem] {
+        let normalizedSpace = codingSpace.standardizedFileURL
+        try validateDestructiveCodingSpace(normalizedSpace)
+        guard itemExists(at: normalizedSpace) else { return [] }
+        let entries = try fm.contentsOfDirectory(
+            at: normalizedSpace,
+            includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+            options: []
+        )
+        let children = entries.compactMap { entry -> CodingSpaceRemovalItem? in
+            guard entry.lastPathComponent != ".gojo" else { return nil }
+            let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+            guard values?.isDirectory == true || values?.isSymbolicLink == true else { return nil }
+            return CodingSpaceRemovalItem(name: entry.lastPathComponent, url: entry, isRoot: false)
+        }
+        .sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+        return children + [CodingSpaceRemovalItem(
+            name: normalizedSpace.lastPathComponent, url: normalizedSpace, isRoot: true)]
+    }
+
+    /// 将单个删除任务移入 macOS 废纸篓。子项目只能是编码空间的直接子级。
+    public func moveCodingSpaceRemovalItemToTrash(_ item: CodingSpaceRemovalItem,
+                                                   in codingSpace: URL) throws {
+        let normalizedSpace = codingSpace.standardizedFileURL
+        try validateDestructiveCodingSpace(normalizedSpace)
+        let itemURL = item.url.standardizedFileURL
+        let isRoot = item.isRoot && itemURL.path == normalizedSpace.path
+        let isDirectChild = !item.isRoot
+            && itemURL.deletingLastPathComponent().path == normalizedSpace.path
+            && itemURL.lastPathComponent != ".gojo"
+        guard isRoot || isDirectChild else {
+            throw WorkspaceError.unsafeCodingSpacePath(item.url.path)
+        }
+        // 删除确认后，文件仍可能被用户或其他进程先一步移走。此时目标状态已经达成。
+        guard itemExists(at: itemURL) else { return }
+        try fm.trashItem(at: itemURL, resultingItemURL: nil)
     }
 
     /// 扫描直接子文件夹，识别成员形态并实时读分支。
@@ -133,7 +325,8 @@ public final class WorkspaceManager {
             try git.clone(url: proj.url, into: dest)
         case .symlink:
             guard proj.cloned else { throw WorkspaceError.publicProjectNotCloned(proj.name) }
-            try symlink.createSymlink(at: dest, pointingTo: space.appendingPathComponent(proj.name))
+            try symlink.createSymlink(
+                at: dest, pointingTo: space.appendingPathComponent(proj.localRelativePath))
         }
         try upsertMember(WorkspaceMember(folderName: proj.name,
                                          publicProjectId: proj.id, mode: mode), in: codingSpace)
@@ -165,6 +358,20 @@ public final class WorkspaceManager {
         try store.saveWorkspace(destManifest, at: dest)
     }
 
+    /// 删除编码空间中的一个直接成员。普通目录会递归清理；符号链接只删除链接本身。
+    public func removeMember(folderName: String, in codingSpace: URL) throws {
+        let path = codingSpace.appendingPathComponent(folderName)
+        guard isDirectChild(path, of: codingSpace), itemExists(at: path) else {
+            throw WorkspaceError.memberNotFound(folderName)
+        }
+
+        try fm.removeItem(at: path)
+        var manifest = (try store.loadWorkspace(at: codingSpace))
+            ?? WorkspaceManifest(name: codingSpace.lastPathComponent)
+        manifest.members.removeAll { $0.folderName == folderName }
+        try store.saveWorkspace(manifest, at: codingSpace)
+    }
+
     public func memberHasLocalChanges(folderName: String, in codingSpace: URL) throws -> Bool {
         let path = codingSpace.appendingPathComponent(folderName)
         return try git.hasUncommittedChanges(at: path) || git.hasUnpushedCommits(at: path)
@@ -189,7 +396,8 @@ public final class WorkspaceManager {
         guard proj.cloned else { throw WorkspaceError.publicProjectNotCloned(proj.name) }
         let dest = codingSpace.appendingPathComponent(folderName)
         try fm.removeItem(at: dest)                    // 删整个本地 clone
-        try symlink.createSymlink(at: dest, pointingTo: space.appendingPathComponent(proj.name))
+        try symlink.createSymlink(
+            at: dest, pointingTo: space.appendingPathComponent(proj.localRelativePath))
         try setMemberMode(folderName, to: .symlink, in: codingSpace)
     }
 
@@ -206,6 +414,50 @@ public final class WorkspaceManager {
     }
 
     // MARK: - 私有辅助
+
+    private func directoryEntries(at url: URL) -> [URL] {
+        ((try? fm.contentsOfDirectory(
+            at: url, includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles])) ?? [])
+            .filter {
+                (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            }
+            .sorted {
+                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+            }
+    }
+
+    private func isDirectChild(_ child: URL, of parent: URL) -> Bool {
+        child.standardizedFileURL.deletingLastPathComponent() == parent.standardizedFileURL
+    }
+
+    private func itemExists(at url: URL) -> Bool {
+        (try? fm.attributesOfItem(atPath: url.path)) != nil
+    }
+
+    private func validateDestructiveCodingSpace(_ codingSpace: URL) throws {
+        let root = URL(fileURLWithPath: "/").standardizedFileURL
+        let home = fm.homeDirectoryForCurrentUser.standardizedFileURL
+        let isRegistered = store.loadIndex().codingSpacePaths.contains {
+            URL(fileURLWithPath: $0).standardizedFileURL == codingSpace
+        }
+        guard codingSpace != root, codingSpace != home,
+              isRegistered else {
+            throw WorkspaceError.unsafeCodingSpacePath(codingSpace.path)
+        }
+    }
+
+    private func validatePublicProjectPath(_ project: URL, in publicSpace: URL) throws {
+        let root = publicSpace.standardizedFileURL
+        let rootPrefix = root.path.hasSuffix("/") ? root.path : root.path + "/"
+        let relativePath = String(project.path.dropFirst(rootPrefix.count))
+        guard project.path.hasPrefix(rootPrefix),
+              project != root,
+              !relativePath.isEmpty,
+              relativePath.split(separator: "/").first != ".gojo" else {
+            throw WorkspaceError.unsafePublicProjectPath(project.path)
+        }
+    }
 
     private func lookupPublicProject(_ id: UUID) throws -> (PublicProject, URL) {
         let space = try publicSpaceURL()

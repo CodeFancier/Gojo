@@ -24,4 +24,9 @@ final class DragPayloadTests: XCTestCase {
         let id = UUID()
         XCTAssertEqual(DragPayload.parsePublicProject(DragPayload.publicProject(id)), id)
     }
+
+    func testCodingSpaceRoundTrip() {
+        let space = URL(fileURLWithPath: "/tmp/编码空间")
+        XCTAssertEqual(DragPayload.parseCodingSpace(DragPayload.codingSpace(space)), space)
+    }
 }

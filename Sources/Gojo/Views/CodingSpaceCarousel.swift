@@ -20,7 +20,6 @@ struct CodingSpaceCarousel: View {
     @State private var scrollLock = false
     /// 滚动代次：仅最新一次滚动负责解锁，避免快速连续 hover 的解锁竞态。
     @State private var scrollGen = 0
-
     private var items: [ShelfItem] {
         state.codingSpaces.map(ShelfItem.coding) + [.newSpace]
     }
@@ -113,6 +112,10 @@ struct CodingSpaceCarousel: View {
         .accessibilityLabel(accessibilityLabel(for: item))
         .accessibilityValue(focused ? "已居中" : "未居中")
         .accessibilityHint(accessibilityHint(for: item, focused: focused))
+        .holdToDelete(enabled: codingSpaceURL(for: item) != nil) {
+            guard let space = codingSpaceURL(for: item) else { return }
+            state.prepareCodingSpaceDeletion(space)
+        }
     }
 
     /// 点击未居中卡：滑到中央并聚焦。复用 hover 的锁，避免居中动画期间被抢焦点闪烁。
@@ -190,6 +193,11 @@ struct CodingSpaceCarousel: View {
         case .newSpace:
             return "新建编码空间"
         }
+    }
+
+    private func codingSpaceURL(for item: ShelfItem) -> URL? {
+        guard case .coding(let url) = item else { return nil }
+        return url
     }
 
     private func accessibilityHint(for item: ShelfItem, focused: Bool) -> String {

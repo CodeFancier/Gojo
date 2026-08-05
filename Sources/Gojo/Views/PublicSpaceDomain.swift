@@ -37,7 +37,7 @@ struct PublicSpaceDomain: View {
             Image(systemName: "globe").font(.system(size: 44)).foregroundStyle(Color.lightBlue)
             Text("还没有指定公共空间").font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
             Text("公共空间是所有共享仓库的家，指定一个文件夹开始")
-                .font(.system(size: 12)).foregroundStyle(Color(white: 0.55))
+                .font(.system(size: 12)).foregroundStyle(Color.textTertiary)
             Button("指定公共空间文件夹") { state.chooseAndSetPublicSpace() }
                 .buttonStyle(.borderedProminent)
         }
@@ -47,10 +47,35 @@ struct PublicSpaceDomain: View {
     // MARK: 项目列表
 
     private var projectList: some View {
-        ScrollView {
-            LazyVStack(spacing: 8) {
-                ForEach(state.publicProjects) { proj in
-                    row(proj)
+        let standaloneCompositeFolders = state.compositePublicFolders.filter { !$0.isPublicProject }
+        return ScrollView {
+            LazyVStack(alignment: .leading, spacing: 10) {
+                if !standaloneCompositeFolders.isEmpty {
+                    Text("复合文件夹")
+                        .font(.headline)
+                        .foregroundStyle(Color.textSecondary)
+                    ForEach(standaloneCompositeFolders) { folder in
+                        CompositePublicFolderRow(folder: folder) { project in
+                            state.promoteNestedPublicProject(project)
+                        }
+                    }
+                }
+
+                if !state.publicProjects.isEmpty {
+                    Text("公共仓库")
+                        .font(.headline)
+                        .foregroundStyle(Color.textSecondary)
+                        .padding(.top, standaloneCompositeFolders.isEmpty ? 0 : 8)
+                    ForEach(state.publicProjects) { proj in
+                        ExpandablePublicProjectRow(
+                            project: proj,
+                            childProjects: childProjects(of: proj),
+                            isBusy: isBusy(proj),
+                            onClone: { state.clonePublicProject(proj.id) },
+                            onDelete: { state.removePublicProject(proj.id) },
+                            onPromote: { state.promoteNestedPublicProject($0) }
+                        )
+                    }
                 }
             }
             .padding(16)
@@ -65,28 +90,15 @@ struct PublicSpaceDomain: View {
         }
     }
 
-    private func row(_ proj: PublicProject) -> some View {
-        let busy = state.publicSpaceFolder.map { state.isBusy(space: $0, folder: proj.name) } ?? false
-        return HStack(spacing: 12) {
-            SourceBadgeIcon(kind: .unjoinedPublic, size: 20, badgeBackground: Color(white: 0.14))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(proj.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
-                Text(proj.url).font(.system(size: 10.5, design: .monospaced))
-                    .foregroundStyle(Color(white: 0.5)).lineLimit(1)
-            }
-            Spacer()
-            if busy {
-                ProgressView().controlSize(.small)
-            } else if proj.cloned {
-                Label("已克隆", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 11)).foregroundStyle(.green).labelStyle(.iconOnly)
-            } else {
-                Button("Clone") { state.clonePublicProject(proj.id) }
-                    .buttonStyle(.bordered).controlSize(.small)
-            }
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-            .fill(Color.white.opacity(0.05)))
+    private func childProjects(of project: PublicProject) -> [NestedPublicProject] {
+        state.compositePublicFolders
+            .first(where: { $0.publicProjectID == project.id })?
+            .projects ?? []
+    }
+
+    private func isBusy(_ project: PublicProject) -> Bool {
+        state.publicSpaceFolder.map {
+            state.isBusy(space: $0, folder: project.name)
+        } ?? false
     }
 }

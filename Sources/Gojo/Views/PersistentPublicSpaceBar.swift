@@ -51,7 +51,10 @@ struct PersistentPublicSpaceBar: View {
             switch mode {
             case .summary:
                 Button(action: onOpen) {
-                    summaryContent
+                    PublicSpaceSummaryContent(
+                        statusText: summaryStatusText,
+                        detailText: detailText
+                    )
                         .padding(.horizontal, 18)
                         .padding(.vertical, 14)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -67,7 +70,7 @@ struct PersistentPublicSpaceBar: View {
             }
         }
         .frame(maxWidth: .infinity)
-        .background(Color.publicSurface)
+        .background(Color.publicSurface, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.publicStroke))
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -75,21 +78,6 @@ struct PersistentPublicSpaceBar: View {
             if newMode == .summary {
                 query = ""
             }
-        }
-    }
-
-    private var summaryContent: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            title
-            Text(summaryStatusText)
-                .font(.body)
-                .foregroundStyle(Color.textPrimary)
-            Text(detailText)
-                .font(.callout)
-                .foregroundStyle(Color.textTertiary)
-            Label("打开公共空间", systemImage: "chevron.right")
-                .font(.callout.bold())
-                .foregroundStyle(Color.publicTeal)
         }
     }
 

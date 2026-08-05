@@ -6,11 +6,17 @@ public struct PublicProject: Codable, Identifiable, Hashable {
     public var url: String
     /// 是否已在公共空间本地克隆
     public var cloned: Bool
+    /// 相对公共空间根目录的本地位置。nil 表示沿用顶层的 name，兼容旧清单。
+    public var relativePath: String?
 
-    public init(id: UUID = UUID(), name: String, url: String, cloned: Bool = false) {
+    public var localRelativePath: String { relativePath ?? name }
+
+    public init(id: UUID = UUID(), name: String, url: String, cloned: Bool = false,
+                relativePath: String? = nil) {
         self.id = id
         self.name = name
         self.url = url
         self.cloned = cloned
+        self.relativePath = relativePath
     }
 }

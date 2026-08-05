@@ -1,19 +1,23 @@
 import AppKit
 import Foundation
-import GojoCore
+@preconcurrency import GojoCore
 
 @MainActor
 final class AppState: ObservableObject {
     @Published var publicProjects: [PublicProject] = []
+    @Published var compositePublicFolders: [PublicCompositeFolder] = []
     @Published var codingSpaces: [URL] = []
     @Published var membersByPath: [String: [ScannedMember]] = [:]
+    @Published var pendingMembersByPath: [String: [PendingCodingSpaceMember]] = [:]
     @Published var route: Route = .shelf
     @Published var busyMembers: Set<String> = []
     @Published var errorMessage: String?
+    @Published var codingSpaceDeletionSession: CodingSpaceDeletionSession?
 
     let manager: WorkspaceManager
     let store: ConfigStore
     private let launcher = ExternalAppLauncher()
+    private let memoryReader = AgentMemoryReader()
     /// 所有耗时操作走同一条串行队列：WorkspaceManager 的写入是「读清单→改→整文件写回」，
     /// 两个并发操作落在同一编码空间会互相覆盖，导致成员从清单消失。串行化根治。
     private let asyncQueue = DispatchQueue(label: "io.gojo.workspace.serial")
@@ -28,6 +32,7 @@ final class AppState: ObservableObject {
         let index = store.loadIndex()
         codingSpaces = index.codingSpacePaths.map { URL(fileURLWithPath: $0) }
         publicProjects = (try? manager.publicProjects()) ?? []
+        compositePublicFolders = (try? manager.publicCompositeFolders()) ?? []
         var m: [String: [ScannedMember]] = [:]
         for space in codingSpaces {
             m[space.path] = (try? manager.scanMembers(in: space)) ?? []
@@ -49,26 +54,37 @@ final class AppState: ObservableObject {
     }
 
     /// 耗时操作：入串行队列，开始前标 busy，完成/失败后清 busy 并 reload。
-    func runAsync(space: URL, folder: String, _ work: @escaping () throws -> Void) {
+    func runAsync(space: URL, folder: String, onFinish: @escaping () -> Void = {},
+                  _ work: @escaping () throws -> Void) {
         let key = busyKey(space: space, folder: folder)
         guard !busyMembers.contains(key) else { return }
         busyMembers.insert(key)
         asyncQueue.async { [weak self] in
+            let failureMessage: String?
             do {
                 try work()
-                DispatchQueue.main.async { self?.busyMembers.remove(key); self?.reload() }
+                failureMessage = nil
             } catch {
-                DispatchQueue.main.async {
-                    self?.busyMembers.remove(key)
-                    self?.errorMessage = "\(error)"
-                    self?.reload()
+                failureMessage = "\(error)"
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.busyMembers.remove(key)
+                if let failureMessage {
+                    self.errorMessage = failureMessage
                 }
+                onFinish()
+                self.reload()
             }
         }
     }
 
     func members(in space: URL) -> [ScannedMember] {
         membersByPath[space.path] ?? []
+    }
+
+    func pendingMembers(in space: URL) -> [PendingCodingSpaceMember] {
+        pendingMembersByPath[space.path] ?? []
     }
 
     var publicSpaceFolder: URL? { try? manager.publicSpaceURL() }
@@ -89,29 +105,140 @@ final class AppState: ObservableObject {
             try manager.clonePublicProject(id: id)
         }
     }
+    func removePublicProject(_ id: UUID) {
+        guard let space = publicSpaceFolder,
+              let project = publicProjects.first(where: { $0.id == id }) else { return }
+        let manager = self.manager
+        runAsync(space: space, folder: project.name) {
+            try manager.removePublicProject(id: id)
+        }
+    }
+    func promoteNestedPublicProject(_ project: NestedPublicProject) {
+        run {
+            try manager.promoteNestedPublicProject(
+                parentRelativePath: project.parentRelativePath, projectName: project.name)
+        }
+    }
 
     // MARK: 编码空间
     func createCodingSpace() {
         guard let url = pickFolder(message: "选择/新建编码空间文件夹") else { return }
         run { try manager.createCodingSpace(name: url.lastPathComponent, at: url) }
     }
-    func addPublicToSpace(_ space: URL, projectId: UUID, mode: MemberMode) {
-        let folder = publicProjects.first(where: { $0.id == projectId })?.name ?? projectId.uuidString
+    func removeCodingSpace(_ space: URL, mode: CodingSpaceRemovalMode) {
         let manager = self.manager
-        switch mode {
-        case .git:
-            runAsync(space: space, folder: folder) {
-                try manager.addPublicProjectToSpace(projectId: projectId, mode: .git, in: space)
-            }
-        case .symlink:
-            run { try manager.addPublicProjectToSpace(projectId: projectId, mode: .symlink, in: space) }
+        runAsync(space: space, folder: "__coding_space__") {
+            try manager.removeCodingSpace(at: space, mode: mode)
         }
     }
-    func moveMember(_ folderName: String, from source: URL, to dest: URL) {
-        guard source != dest else { return }
+    func prepareCodingSpaceDeletion(_ space: URL) {
+        do {
+            let items = try manager.codingSpaceRemovalItems(at: space)
+            guard !items.isEmpty else {
+                // 文件夹已被外部删除时无需展示一个无法执行的空任务列表，直接清理登记。
+                try manager.removeCodingSpace(at: space, mode: .unregisterOnly)
+                reload()
+                return
+            }
+            codingSpaceDeletionSession = CodingSpaceDeletionSession(
+                space: space, tasks: items.map { CodingSpaceDeletionTask(item: $0) })
+        } catch {
+            errorMessage = "\(error)"
+        }
+    }
+    func dismissCodingSpaceDeletion() {
+        guard codingSpaceDeletionSession?.phase != .deleting else { return }
+        codingSpaceDeletionSession = nil
+    }
+    func unregisterPreparedCodingSpace() {
+        guard let session = codingSpaceDeletionSession else { return }
+        codingSpaceDeletionSession = nil
+        removeCodingSpace(session.space, mode: .unregisterOnly)
+    }
+    func trashPreparedCodingSpace() {
+        guard var session = codingSpaceDeletionSession, session.phase == .review else { return }
+        session.phase = .deleting
+        codingSpaceDeletionSession = session
+        let sessionID = session.id
+        let space = session.space
+        let tasks = session.tasks
         let manager = self.manager
-        runAsync(space: source, folder: folderName) {
-            try manager.moveMember(folderName: folderName, from: source, to: dest)
+
+        asyncQueue.async { [weak self] in
+            var rootMoved = false
+            for task in tasks {
+                DispatchQueue.main.async {
+                    self?.updateDeletionTask(task.id, in: sessionID, status: .running)
+                }
+                do {
+                    try manager.moveCodingSpaceRemovalItemToTrash(task.item, in: space)
+                    if task.item.isRoot { rootMoved = true }
+                    DispatchQueue.main.async {
+                        self?.updateDeletionTask(task.id, in: sessionID, status: .completed)
+                    }
+                } catch {
+                    let message = error.localizedDescription
+                    DispatchQueue.main.async {
+                        self?.updateDeletionTask(task.id, in: sessionID, status: .failed(message))
+                    }
+                }
+            }
+
+            if rootMoved {
+                try? manager.removeCodingSpace(at: space, mode: .unregisterOnly)
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.codingSpaceDeletionSession?.id == sessionID {
+                    self.codingSpaceDeletionSession?.phase = .finished
+                }
+                self.reload()
+            }
+        }
+    }
+
+    private func updateDeletionTask(_ taskID: String, in sessionID: UUID,
+                                    status: CodingSpaceDeletionTaskStatus) {
+        guard codingSpaceDeletionSession?.id == sessionID,
+              let index = codingSpaceDeletionSession?.tasks.firstIndex(where: { $0.id == taskID })
+        else { return }
+        codingSpaceDeletionSession?.tasks[index].status = status
+    }
+    func addPublicToSpace(_ space: URL, projectId: UUID, mode: MemberMode) {
+        guard let project = publicProjects.first(where: { $0.id == projectId }) else { return }
+        let folder = project.name
+        guard !isBusy(space: space, folder: folder) else { return }
+
+        var pendingMembers = pendingMembers(in: space)
+        pendingMembers.removeAll { $0.folderName == folder }
+        pendingMembers.append(PendingCodingSpaceMember(
+            projectID: projectId,
+            folderName: folder,
+            mode: mode
+        ))
+        pendingMembersByPath[space.path] = pendingMembers
+
+        let manager = self.manager
+        runAsync(space: space, folder: folder, onFinish: { [weak self] in
+            self?.removePendingMember(folder: folder, from: space)
+        }) {
+            try manager.addPublicProjectToSpace(projectId: projectId, mode: mode, in: space)
+        }
+    }
+
+    private func removePendingMember(folder: String, from space: URL) {
+        guard var pendingMembers = pendingMembersByPath[space.path] else { return }
+        pendingMembers.removeAll { $0.folderName == folder }
+        if pendingMembers.isEmpty {
+            pendingMembersByPath.removeValue(forKey: space.path)
+        } else {
+            pendingMembersByPath[space.path] = pendingMembers
+        }
+    }
+    func removeMember(_ folderName: String, from space: URL) {
+        let manager = self.manager
+        runAsync(space: space, folder: folderName) {
+            try manager.removeMember(folderName: folderName, in: space)
         }
     }
     func memberHasLocalChanges(_ space: URL, folderName: String) -> Bool {
@@ -161,6 +288,24 @@ final class AppState: ObservableObject {
     func openInFinder() {
         guard let url = selectedFolderURL else { return }
         run { try launcher.launch(.finder, path: url) }
+    }
+
+    // MARK: 助手记忆 / 历史会话
+    /// 后台读取某目录（成员或编码空间根）下 Claude/Codex 的记忆与会话快照，读完回主线程。
+    func loadAgentMemory(projectURL: URL, kind: AgentKind,
+                         completion: @escaping (AgentMemorySnapshot) -> Void) {
+        let reader = memoryReader
+        asyncQueue.async {
+            let snap = reader.snapshot(for: kind, projectPath: projectURL)
+            DispatchQueue.main.async { completion(snap) }
+        }
+    }
+
+    /// 在偏好终端里 resume 指定会话（cd 到该目录后执行 claude/codex resume）。
+    func resumeSession(projectURL: URL, kind: AgentKind, sessionId: String) {
+        let term = terminalPreference
+        do { try launcher.resume(kind, sessionId: sessionId, cwd: projectURL, terminal: term) }
+        catch { errorMessage = "\(error)" }
     }
 
     // MARK: 工具

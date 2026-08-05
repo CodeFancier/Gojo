@@ -1,19 +1,18 @@
 import SwiftUI
 import GojoCore
 
-/// 编码空间里的成员卡：图标 + 名 + 分支；悬停底部滑出操作条，右键同项。
+/// 编码空间里的成员卡：图标 + 名 + 分支；长按显示统一删除操作。
 /// 进行中时角标位置换成进度指示器，操作禁用。
 struct MemberCard: View {
     @EnvironmentObject var state: AppState
     let space: URL
     let member: ScannedMember
-    /// 拖拽开始时回传文件夹名，由领域展示「移动到其他空间」覆盖层。
-    var onBeginDrag: (String) -> Void = { _ in }
 
     @State private var hovering = false
     @State private var showBranchPicker = false
     @State private var branchOptions: [String] = []
     @State private var confirmSymlink = false
+    @State private var confirmDelete = false
 
     private var busy: Bool { state.isBusy(space: space, folder: member.folderName) }
 
@@ -36,10 +35,13 @@ struct MemberCard: View {
                         .help(member.folderName)
                     if let b = member.branch {
                         Text(b).font(.system(size: 10.5, design: .monospaced))
-                            .foregroundStyle(Color(white: 0.55)).lineLimit(1)
+                            .foregroundStyle(Color.textTertiary).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
+                // 常驻的助手记忆入口：一眼可见、直接点。
+                AgentMemoryButtons(projectURL: space.appendingPathComponent(member.folderName),
+                                   displayName: member.folderName, compact: true)
             }
             .padding(12)
 
@@ -50,25 +52,15 @@ struct MemberCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .fill(Color.white.opacity(0.055)))
+            .fill(Color.surface))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-            .strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+            .strokeBorder(Color.cardStroke, lineWidth: 1))
         .opacity(busy ? 0.7 : 1)
         .onHover { h in withAnimation(Motion.dropZone) { hovering = h } }
-        .contextMenu { menuItems }
-        .onDrag {
-            onBeginDrag(member.folderName)
-            return NSItemProvider(object: DragPayload.member(space: space,
-                                                             folder: member.folderName) as NSString)
-        } preview: {
-            HStack(spacing: 6) {
-                SourceBadgeIcon(kind: SourceIconKind(member.form), size: 16)
-                Text(member.folderName).lineLimit(1)
-            }
-            .font(.callout.weight(.medium))
-            .padding(.horizontal, 12).padding(.vertical, 7)
-            .background(.thinMaterial, in: Capsule())
+        .holdToDelete(enabled: !busy) {
+            confirmDelete = true
         }
+        .contextMenu { menuItems }
         .confirmationDialog("选择分支", isPresented: $showBranchPicker,
                             titleVisibility: .visible) {
             ForEach(branchOptions, id: \.self) { b in
@@ -84,6 +76,15 @@ struct MemberCard: View {
         } message: {
             Text("该成员的本地 clone 有未提交或未推送的改动，切回软链接将删除它们。")
         }
+        .confirmationDialog("清理“\(member.folderName)”项目？",
+                            isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("清理当前文件夹", role: .destructive) {
+                state.removeMember(member.folderName, from: space)
+            }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text(deleteConfirmationMessage)
+        }
     }
 
     // MARK: 图标（含进行中态）
@@ -92,14 +93,14 @@ struct MemberCard: View {
         if busy {
             ZStack {
                 Image(systemName: "shippingbox")
-                    .font(.system(size: 22)).foregroundStyle(Color(white: 0.82))
+                    .font(.system(size: 22)).foregroundStyle(Color.textSecondary)
                 ProgressView().controlSize(.small)
                     .offset(x: 9, y: 8)
             }
             .frame(width: 22, height: 22)
         } else {
             SourceBadgeIcon(kind: SourceIconKind(member.form), size: 22,
-                            badgeBackground: Color(white: 0.14))
+                            badgeBackground: Color.chrome)
         }
     }
 
@@ -149,5 +150,12 @@ struct MemberCard: View {
         case .standalone:
             Button("同步") { state.syncMember(space, folderName: member.folderName) }
         }
+    }
+
+    private var deleteConfirmationMessage: String {
+        if case .publicSymlink = member.form {
+            return "只会清理当前编码空间中的软链接，不会删除公共仓库。"
+        }
+        return "将永久清理当前项目文件夹，以及其中的全部子文件夹和文件。此操作无法撤销。"
     }
 }

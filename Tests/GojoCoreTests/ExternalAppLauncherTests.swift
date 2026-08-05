@@ -18,4 +18,17 @@ final class ExternalAppLauncherTests: XCTestCase {
         XCTAssertEqual(l.launchSpec(for: .terminal(.warp), path: path).arguments,
                        ["-a", "Warp", "/tmp/space"])
     }
+
+    func testResumeScriptClaude() {
+        let script = ExternalAppLauncher().resumeScript(
+            .claude, sessionId: "sid-1", cwd: URL(fileURLWithPath: "/tmp/space"))
+        XCTAssertTrue(script.contains("cd '/tmp/space'"))
+        XCTAssertTrue(script.contains("claude --resume 'sid-1'"))
+    }
+
+    func testResumeScriptCodex() {
+        let script = ExternalAppLauncher().resumeScript(
+            .codex, sessionId: "cs-2", cwd: URL(fileURLWithPath: "/tmp/space"))
+        XCTAssertTrue(script.contains("codex resume 'cs-2'"))
+    }
 }
