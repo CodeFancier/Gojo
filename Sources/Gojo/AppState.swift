@@ -13,11 +13,13 @@ final class AppState: ObservableObject {
     @Published var busyMembers: Set<String> = []
     @Published var errorMessage: String?
     @Published var codingSpaceDeletionSession: CodingSpaceDeletionSession?
+    @Published var workspaceScanSession: WorkspaceScanSession?
 
     let manager: WorkspaceManager
     let store: ConfigStore
     private let launcher = ExternalAppLauncher()
     private let memoryReader = AgentMemoryReader()
+    private let scanner = AgentWorkspaceScanner()
     /// 所有耗时操作走同一条串行队列：WorkspaceManager 的写入是「读清单→改→整文件写回」，
     /// 两个并发操作落在同一编码空间会互相覆盖，导致成员从清单消失。串行化根治。
     private let asyncQueue = DispatchQueue(label: "io.gojo.workspace.serial")
@@ -306,6 +308,125 @@ final class AppState: ObservableObject {
         let term = terminalPreference
         do { try launcher.resume(kind, sessionId: sessionId, cwd: projectURL, terminal: term) }
         catch { errorMessage = "\(error)" }
+    }
+
+    // MARK: 一键扫描工作空间
+
+    /// 启动后台扫描，发现本机所有 Claude Code / Codex 曾用过的项目，填入结果列表。
+    func startWorkspaceScan() {
+        let session = WorkspaceScanSession()
+        workspaceScanSession = session
+        let sessionID = session.id
+        let scanner = self.scanner
+        asyncQueue.async { [weak self] in
+            let discovered = scanner.scan()
+            let results = discovered.map {
+                WorkspaceScanResult(project: $0, isSelected: $0.exists, status: .idle)
+            }
+            DispatchQueue.main.async {
+                guard let self, self.workspaceScanSession?.id == sessionID else { return }
+                self.workspaceScanSession?.results = results
+                self.workspaceScanSession?.phase = .review
+            }
+        }
+    }
+
+    func dismissWorkspaceScan() {
+        guard workspaceScanSession?.phase != .importing else { return }
+        workspaceScanSession = nil
+    }
+
+    func setSpaceName(_ name: String) {
+        workspaceScanSession?.spaceName = name
+    }
+
+    func toggleScanResult(_ id: String) {
+        guard let i = workspaceScanSession?.results.firstIndex(where: { $0.id == id }),
+              workspaceScanSession?.results[i].project.exists == true else { return }
+        workspaceScanSession?.results[i].isSelected.toggle()
+    }
+
+    func selectAllScanResults(_ select: Bool) {
+        guard var session = workspaceScanSession else { return }
+        for i in session.results.indices where session.results[i].project.exists {
+            session.results[i].isSelected = select
+        }
+        workspaceScanSession = session
+    }
+
+    /// 把勾选的项目批量软链接进一个新建编码空间。
+    func importScannedWorkspaces() {
+        guard let session = workspaceScanSession else { return }
+        let targets = session.selectedForImport
+        guard !targets.isEmpty else { return }
+        guard let spaceURL = pickFolder(message: "选择/新建编码空间文件夹") else { return }
+        let trimmed = session.spaceName.trimmingCharacters(in: .whitespaces)
+        let name = trimmed.isEmpty ? "已发现项目" : trimmed
+        let sessionID = session.id
+        workspaceScanSession?.phase = .importing
+        let manager = self.manager
+
+        asyncQueue.async { [weak self] in
+            var setupError: String?
+            do {
+                try manager.createCodingSpace(name: name, at: spaceURL)
+            } catch {
+                setupError = "\(error)"
+            }
+            if let setupError {
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    self.errorMessage = setupError
+                    if self.workspaceScanSession?.id == sessionID {
+                        self.workspaceScanSession?.phase = .finished
+                    }
+                }
+                return
+            }
+
+            var usedNames = Set<String>()
+            for result in targets {
+                DispatchQueue.main.async {
+                    self?.updateScanResult(result.id, in: sessionID, status: .linking)
+                }
+                var folder = result.project.name
+                var suffix = 2
+                while usedNames.contains(folder)
+                        || FileManager.default.fileExists(
+                            atPath: spaceURL.appendingPathComponent(folder).path) {
+                    folder = "\(result.project.name)_\(suffix)"
+                    suffix += 1
+                }
+                usedNames.insert(folder)
+                do {
+                    try manager.linkExternalProject(
+                        into: spaceURL, folderName: folder, target: result.project.path)
+                    DispatchQueue.main.async {
+                        self?.updateScanResult(result.id, in: sessionID, status: .linked)
+                    }
+                } catch {
+                    let msg = "\(error)"
+                    DispatchQueue.main.async {
+                        self?.updateScanResult(result.id, in: sessionID, status: .failed(msg))
+                    }
+                }
+            }
+            DispatchQueue.main.async {
+                guard let self else { return }
+                if self.workspaceScanSession?.id == sessionID {
+                    self.workspaceScanSession?.phase = .finished
+                }
+                self.reload()
+            }
+        }
+    }
+
+    private func updateScanResult(_ id: String, in sessionID: UUID,
+                                  status: WorkspaceScanResultStatus) {
+        guard workspaceScanSession?.id == sessionID,
+              let i = workspaceScanSession?.results.firstIndex(where: { $0.id == id })
+        else { return }
+        workspaceScanSession?.results[i].status = status
     }
 
     // MARK: 工具

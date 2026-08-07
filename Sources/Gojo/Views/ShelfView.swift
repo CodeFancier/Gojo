@@ -2,6 +2,7 @@ import SwiftUI
 
 /// 首页：编码空间轮播。
 struct ShelfView: View {
+    @EnvironmentObject private var state: AppState
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ScaledMetric(relativeTo: .headline) private var carouselTitleLineHeight: CGFloat = 24
     @ScaledMetric(relativeTo: .caption) private var authorLineHeight: CGFloat = 16
@@ -36,6 +37,22 @@ struct ShelfView: View {
                 AuthorCredit()
                     .padding(.trailing, 16)
                     .padding(.bottom, authorBottomPadding)
+            }
+            .overlay(alignment: .topTrailing) {
+                Button {
+                    state.startWorkspaceScan()
+                } label: {
+                    Label("扫描工作空间", systemImage: "rectangle.and.text.magnifyingglass")
+                        .labelStyle(.iconOnly)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(Color.textSecondary)
+                        .padding(8)
+                        .background(Color.lightBlue.opacity(0.12), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .help("扫描本机 Claude Code / Codex 工作空间")
+                .padding(.trailing, 16)
+                .padding(.top, 12)
             }
     }
 

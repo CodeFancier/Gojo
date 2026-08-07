@@ -1,0 +1,25 @@
+# 在 macOS runner 上编译并运行单元测试。
+name: Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: Swift 版本
+        run: swift --version
+
+      - name: 编译并运行测试
+        run: swift test

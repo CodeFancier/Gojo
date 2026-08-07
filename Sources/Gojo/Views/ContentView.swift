@@ -56,6 +56,9 @@ struct ContentView: View {
         .sheet(item: $state.codingSpaceDeletionSession) { _ in
             CodingSpaceDeletionSheet()
         }
+        .sheet(item: $state.workspaceScanSession) { _ in
+            WorkspaceScanSheet()
+        }
     }
 
     @ViewBuilder private var routedLayout: some View {

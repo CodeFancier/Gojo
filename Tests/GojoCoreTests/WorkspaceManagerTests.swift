@@ -537,4 +537,39 @@ final class WorkspaceManagerTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: ws.path))
         XCTAssertFalse(mgr.codingSpaceURLs().contains(ws))
     }
+
+    // MARK: - 外部项目软链接导入
+
+    func testScanMembersRecognizesExternalSymlinkAfterLink() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let external = try TestSupport.makeLocalGitRepo(named: "app", in: sandbox)
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+
+        // 软链接导入：不写清单，靠扫描发现为 .externalSymlink
+        try mgr.linkExternalProject(into: ws, folderName: "app", target: external)
+
+        let members = try mgr.scanMembers(in: ws)
+        XCTAssertEqual(members.count, 1)
+        XCTAssertEqual(members.first?.folderName, "app")
+        guard case .externalSymlink(let target) = members.first?.form else {
+            XCTFail("期望 .externalSymlink，得到 \(String(describing: members.first?.form))")
+            return
+        }
+        XCTAssertEqual(target, external.path)
+    }
+
+    func testLinkExternalProjectRefusesNameCollision() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let external = try TestSupport.makeLocalGitRepo(named: "app", in: sandbox)
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+        try mgr.linkExternalProject(into: ws, folderName: "app", target: external)
+
+        XCTAssertThrowsError(
+            try mgr.linkExternalProject(into: ws, folderName: "app", target: external)
+        ) {
+            XCTAssertEqual($0 as? WorkspaceError, .memberNameCollision("app"))
+        }
+    }
 }

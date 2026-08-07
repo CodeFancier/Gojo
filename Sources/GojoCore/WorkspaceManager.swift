@@ -301,8 +301,15 @@ public final class WorkspaceManager {
 
             let form: MemberForm
             if isLink {
-                guard let b = bound, b.mode == .symlink else { continue } // 未知符号链接，跳过
-                form = .publicSymlink(b.publicProjectId)
+                if let b = bound, b.mode == .symlink {
+                    form = .publicSymlink(b.publicProjectId)
+                } else if let target = resolvedSymlinkTarget(entry),
+                          fm.fileExists(atPath: target.appendingPathComponent(".git").path) {
+                    // 未绑定、但指向外部含 .git 仓库的符号链接（如一键扫描导入的成员）
+                    form = .externalSymlink(target.path)
+                } else {
+                    continue   // 其余未知符号链接，跳过
+                }
             } else {
                 guard fm.fileExists(atPath: entry.appendingPathComponent(".git").path) else { continue }
                 if let b = bound, b.mode == .git { form = .publicGit(b.publicProjectId) }
@@ -312,6 +319,14 @@ public final class WorkspaceManager {
             result.append(ScannedMember(folderName: name, form: form, branch: branch))
         }
         return result
+    }
+
+    /// 把外部项目目录以符号链接形式加入编码空间。不写清单——靠 `scanMembers` 发现为
+    /// `.externalSymlink`，与独立仓库（standalone）同为「不入清单、扫描发现」的成员形态。
+    public func linkExternalProject(into codingSpace: URL, folderName: String, target: URL) throws {
+        let dest = codingSpace.appendingPathComponent(folderName)
+        guard !itemExists(at: dest) else { throw WorkspaceError.memberNameCollision(folderName) }
+        try symlink.createSymlink(at: dest, pointingTo: target)
     }
 
     /// 把公共项目以指定模式落入编码空间，并记入清单。
@@ -425,6 +440,14 @@ public final class WorkspaceManager {
             .sorted {
                 $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
             }
+    }
+
+    /// 解析符号链接的目标为绝对 URL（相对目标按链接所在目录解析），不跟踪后续链。
+    private func resolvedSymlinkTarget(_ linkURL: URL) -> URL? {
+        guard let dest = try? fm.destinationOfSymbolicLink(atPath: linkURL.path) else { return nil }
+        return dest.hasPrefix("/")
+            ? URL(fileURLWithPath: dest)
+            : linkURL.deletingLastPathComponent().appendingPathComponent(dest)
     }
 
     private func isDirectChild(_ child: URL, of parent: URL) -> Bool {

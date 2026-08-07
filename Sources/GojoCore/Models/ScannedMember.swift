@@ -5,6 +5,7 @@ public enum MemberForm: Hashable {
     case standalone              // 含 .git、未绑定公共项目
     case publicGit(UUID)         // 含 .git、绑定公共项目（Git 模式）
     case publicSymlink(UUID)     // 符号链接指向公共项目
+    case externalSymlink(String) // 未绑定、指向外部含 .git 目标的符号链接（存目标绝对路径）
 }
 
 public struct ScannedMember: Identifiable, Hashable {
