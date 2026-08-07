@@ -36,14 +36,10 @@ struct HoldToDeleteModifier: ViewModifier {
         }
         .scaleEffect(isPresented && !reduceMotion ? 0.985 : 1)
         .onLongPressGesture(minimumDuration: 0.6) {
-            guard enabled else { return }
-            withAnimation(reduceMotion ? nil : Motion.dropZone) {
-                isPresented = true
-            }
+            present()
         }
         .accessibilityAction(named: "显示删除操作") {
-            guard enabled else { return }
-            isPresented = true
+            present()
         }
         .help(enabled ? "按住显示删除操作" : "")
         .onChange(of: enabled) { enabled in
@@ -61,6 +57,16 @@ struct HoldToDeleteModifier: ViewModifier {
                 .combined(with: .scale(scale: 0.92, anchor: .trailing))
                 .combined(with: .opacity)
         }
+    }
+
+    private func present() {
+        guard enabled else { return }
+        // 长按识别成功时鼠标通常仍按住：这里直接同步置位，不要用 withAnimation。
+        // 包进动画 transaction 后，这次状态变更会在「静止按压、无新输入事件」期间被
+        // 挂起，直到下一次输入（如鼠标移出卡片触发 onHover）才刷新——表现为
+        // 「要把鼠标移出项目框、删除按钮才出现」。消失走 dismiss()，发生在松开后的
+        // 正常事件循环里，仍保留动画。
+        isPresented = true
     }
 
     private func confirmDelete() {
