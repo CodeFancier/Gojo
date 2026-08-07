@@ -19,7 +19,8 @@ struct MemberCard: View {
     private var isGit: Bool {
         switch member.form {
         case .standalone, .publicGit: return true
-        case .publicSymlink: return false
+        // 软链接成员（公共项目软链接 / 外部项目软链接）不提供 Git 同步与切分支。
+        case .publicSymlink, .externalSymlink: return false
         }
     }
 
@@ -149,12 +150,18 @@ struct MemberCard: View {
             }
         case .standalone:
             Button("同步") { state.syncMember(space, folderName: member.folderName) }
+        case .externalSymlink:
+            // 外部项目软链接：Gojo 不持有其公共项目记录，不提供模式切换或同步。
+            EmptyView()
         }
     }
 
     private var deleteConfirmationMessage: String {
         if case .publicSymlink = member.form {
             return "只会清理当前编码空间中的软链接，不会删除公共仓库。"
+        }
+        if case .externalSymlink = member.form {
+            return "只会删除当前编码空间中的软链接，不会移动外部项目本体。"
         }
         return "将永久清理当前项目文件夹，以及其中的全部子文件夹和文件。此操作无法撤销。"
     }

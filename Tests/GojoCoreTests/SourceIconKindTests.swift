@@ -2,10 +2,12 @@ import XCTest
 @testable import GojoCore
 
 final class SourceIconKindTests: XCTestCase {
-    func testFromMemberFormCoversThreeForms() {
+    func testFromMemberFormCoversAllForms() {
         XCTAssertEqual(SourceIconKind(.standalone), .standalone)
         XCTAssertEqual(SourceIconKind(.publicGit(UUID())), .publicGit)
         XCTAssertEqual(SourceIconKind(.publicSymlink(UUID())), .publicSymlink)
+        // 外部软链接复用软链接图标的 link 角标。
+        XCTAssertEqual(SourceIconKind(.externalSymlink("/some/where")), .publicSymlink)
     }
 
     func testBaseSymbol() {

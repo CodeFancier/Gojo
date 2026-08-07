@@ -10,9 +10,10 @@ public enum SourceIconKind: Equatable {
 
     public init(_ form: MemberForm) {
         switch form {
-        case .standalone:    self = .standalone
-        case .publicGit:     self = .publicGit
-        case .publicSymlink: self = .publicSymlink
+        case .standalone: self = .standalone
+        case .publicGit: self = .publicGit
+        // 外部软链接与公共项目软链接同属「软链接」语义，共用 link 角标。
+        case .publicSymlink, .externalSymlink: self = .publicSymlink
         }
     }
 
