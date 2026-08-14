@@ -55,7 +55,7 @@ struct ExpandablePublicProjectRow: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(Color.surface)
         )
-        .holdToDelete(enabled: !isBusy, trailingInset: 64) {
+        .holdToDelete(enabled: !isBusy) {
             confirmDelete = true
         }
         .confirmationDialog(

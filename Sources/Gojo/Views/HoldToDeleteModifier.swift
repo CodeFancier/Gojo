@@ -1,112 +1,146 @@
 import SwiftUI
 
+/// 按住进入待删状态：卡片呈现选中效果，右缘滑出垃圾桶图标；
+/// 把卡片拖到垃圾桶上松手即删除，拖到其他位置或原地松手则弹回取消。
+///
+/// 用 LongPressGesture.sequenced(before: DragGesture) 一条手势链实现
+/// 「按住→拖动」：长按成功即被手势独占，不会在松手时误触发卡片按钮的
+/// 导航动作；拖动事件持续产生输入，也不受静止按压期间渲染挂起的影响。
 struct HoldToDeleteModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isPresented = false
-    /// 按压进行中：从按下就开始渐显红框，让等待时长可感知。
-    @State private var isPressing = false
+    @State private var isArmed = false
+    @State private var dragTranslation: CGSize = .zero
+    @State private var dragLocation: CGPoint?
+    @State private var trashFrame: CGRect = .zero
 
     let enabled: Bool
-    let trailingInset: CGFloat
     let onDelete: () -> Void
 
     func body(content: Content) -> some View {
-        ZStack(alignment: .bottomTrailing) {
-            content
-                .allowsHitTesting(!isPresented)
-
-            if isPresented {
-                DeletionActionBar(
-                    onDelete: confirmDelete,
-                    onCancel: dismiss
-                )
-                .padding(.vertical, 8)
-                .padding(.leading, 8)
-                .padding(.trailing, trailingInset)
-                .transition(actionTransition)
-                .zIndex(1)
+        content
+            .allowsHitTesting(!isArmed)
+            // 选中态红框：悬停垃圾桶时加浓提示即将删除
+            .overlay {
+                if isArmed {
+                    RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(Color.red.opacity(hoveringTrash ? 1 : 0.8), lineWidth: 2)
+                        .allowsHitTesting(false)
+                }
             }
-        }
-        .contentShape(Rectangle())
-        .overlay {
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Color.red.opacity(strokeOpacity), lineWidth: 2)
-                .allowsHitTesting(false)
-                .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: isPressing)
-        }
-        .scaleEffect(pressScale)
-        // 默认 maximumDistance 仅约 10pt，在滚动容器里按压时轻微漂移即被判失败、
-        // 又被 ScrollView 的 pan 手势抢占；放宽到 80pt 并缩短时长，长按才够灵敏。
-        .onLongPressGesture(minimumDuration: 0.4, maximumDistance: 80) {
-            present()
-        } onPressingChanged: { pressing in
-            isPressing = pressing
-        }
-        .accessibilityAction(named: "显示删除操作") {
-            present()
-        }
-        .help(enabled ? "按住显示删除操作" : "")
-        .onChange(of: enabled) { enabled in
-            if !enabled {
-                isPresented = false
-                isPressing = false
+            .scaleEffect(pressScale)
+            .offset(isArmed ? dragTranslation : .zero)
+            // 垃圾桶挂在 offset 之后：卡片拖走，垃圾桶留在原地等投放
+            .overlay(alignment: .trailing) {
+                if isArmed {
+                    trashIcon
+                        .padding(.trailing, 10)
+                        .background(trashReporter)
+                        .zIndex(2)
+                }
             }
-        }
+            .contentShape(Rectangle())
+            .gesture(holdAndDrag)
+            .accessibilityAction(named: "删除") {
+                onDelete()
+            }
+            .help(enabled ? "按住卡片，拖到垃圾桶上松手删除" : "")
+            .onChange(of: enabled) { enabled in
+                if !enabled { reset() }
+            }
     }
 
-    /// 按压时半显、成功后全显的红框透明度。
-    private var strokeOpacity: Double {
-        if isPresented { return 0.85 }
-        if enabled && isPressing { return 0.45 }
-        return 0
+    // MARK: 手势
+
+    private var holdAndDrag: some Gesture {
+        LongPressGesture(minimumDuration: 0.35, maximumDistance: 80)
+            .sequenced(before: DragGesture(minimumDuration: 0, coordinateSpace: .global))
+            .onChanged { value in
+                switch value {
+                case .first(true):
+                    guard enabled, !isArmed else { return }
+                    // 同步置位、不包动画：静止按压期间的状态变更会被挂起到
+                    // 下一次输入事件才刷新（见 present() 时期的历史教训）。
+                    // 新交互里用户接下来必然拖动，拖动事件会立即补上渲染。
+                    isArmed = true
+                case .second(true, let drag):
+                    dragTranslation = drag.translation
+                    dragLocation = drag.location
+                default:
+                    break
+                }
+            }
+            .onEnded { value in
+                switch value {
+                case .second(true, let drag):
+                    if dropTarget.contains(drag.location) {
+                        reset()
+                        onDelete()
+                    } else {
+                        cancel()
+                    }
+                default:
+                    cancel()
+                }
+            }
     }
+
+    /// 垃圾桶命中区域：图标外扩一圈，降低投放精度要求。
+    private var dropTarget: CGRect {
+        trashFrame.insetBy(dx: -14, dy: -14)
+    }
+
+    private var hoveringTrash: Bool {
+        guard isArmed, let loc = dragLocation else { return false }
+        return dropTarget.contains(loc)
+    }
+
+    // MARK: 待删态视觉
 
     private var pressScale: CGFloat {
-        guard !reduceMotion else { return 1 }
-        if isPresented { return 0.985 }
-        if enabled && isPressing { return 0.995 }
-        return 1
+        guard !reduceMotion, isArmed else { return 1 }
+        return hoveringTrash ? 0.92 : 0.97
     }
 
-    private var actionTransition: AnyTransition {
-        if reduceMotion {
-            .opacity
-        } else {
-            .move(edge: .trailing)
-                .combined(with: .scale(scale: 0.92, anchor: .trailing))
-                .combined(with: .opacity)
+    private var trashIcon: some View {
+        Image(systemName: "trash.fill")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(hoveringTrash ? Color.white : Color.red)
+            .frame(width: 32, height: 32)
+            .background(Circle().fill(hoveringTrash ? Color.red : Color.chrome))
+            .overlay(Circle().strokeBorder(Color.red.opacity(0.6), lineWidth: 1.5))
+            .scaleEffect(hoveringTrash ? 1.18 : 1)
+            .animation(reduceMotion ? nil : .spring(response: 0.25, dampingFraction: 0.6),
+                       value: hoveringTrash)
+            .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+            .allowsHitTesting(false)
+    }
+
+    /// 垃圾桶位置固定，出现时读一次全局 frame 即可用于投放判定。
+    private var trashReporter: some View {
+        GeometryReader { geo in
+            Color.clear
+                .onAppear { trashFrame = geo.frame(in: .global) }
         }
     }
 
-    private func present() {
-        guard enabled else { return }
-        // 长按识别成功时鼠标通常仍按住：这里直接同步置位，不要用 withAnimation。
-        // 包进动画 transaction 后，这次状态变更会在「静止按压、无新输入事件」期间被
-        // 挂起，直到下一次输入（如鼠标移出卡片触发 onHover）才刷新——表现为
-        // 「要把鼠标移出项目框、删除按钮才出现」。消失走 dismiss()，发生在松开后的
-        // 正常事件循环里，仍保留动画。
-        isPresented = true
-    }
+    // MARK: 状态
 
-    private func confirmDelete() {
-        dismiss()
-        onDelete()
-    }
-
-    private func dismiss() {
+    private func cancel() {
         withAnimation(reduceMotion ? nil : Motion.dropZone) {
-            isPresented = false
+            reset()
         }
+    }
+
+    private func reset() {
+        isArmed = false
+        dragTranslation = .zero
+        dragLocation = nil
     }
 }
 
 extension View {
-    func holdToDelete(enabled: Bool = true, trailingInset: CGFloat = 8,
+    func holdToDelete(enabled: Bool = true,
                       onDelete: @escaping () -> Void) -> some View {
-        modifier(HoldToDeleteModifier(
-            enabled: enabled,
-            trailingInset: trailingInset,
-            onDelete: onDelete
-        ))
+        modifier(HoldToDeleteModifier(enabled: enabled, onDelete: onDelete))
     }
 }
