@@ -53,7 +53,7 @@ struct HoldToDeleteModifier: ViewModifier {
 
     private var holdAndDrag: some Gesture {
         LongPressGesture(minimumDuration: 0.35, maximumDistance: 80)
-            .sequenced(before: DragGesture(minimumDuration: 0, coordinateSpace: .global))
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
             .onChanged { value in
                 switch value {
                 case .first(true):
@@ -62,7 +62,7 @@ struct HoldToDeleteModifier: ViewModifier {
                     // 下一次输入事件才刷新（见 present() 时期的历史教训）。
                     // 新交互里用户接下来必然拖动，拖动事件会立即补上渲染。
                     isArmed = true
-                case .second(true, let drag):
+                case .second(true, let drag?):
                     dragTranslation = drag.translation
                     dragLocation = drag.location
                 default:
@@ -71,7 +71,7 @@ struct HoldToDeleteModifier: ViewModifier {
             }
             .onEnded { value in
                 switch value {
-                case .second(true, let drag):
+                case .second(true, let drag?):
                     if dropTarget.contains(drag.location) {
                         reset()
                         onDelete()
