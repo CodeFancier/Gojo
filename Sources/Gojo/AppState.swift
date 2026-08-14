@@ -284,7 +284,12 @@ final class AppState: ObservableObject {
         }
     }
     func openInTerminal() {
-        guard let url = selectedFolderURL else { return }
+        guard let url = selectedFolderURL else {
+            // 首页等路线没有选中目录，明确提示而不是静默无反应
+            // （偏好此时已被菜单处理程序写入，用户会以为点了没效果）。
+            errorMessage = "当前页面没有可打开的文件夹，请先进入一个空间"
+            return
+        }
         run { try launcher.launch(.terminal(terminalPreference), path: url) }
     }
     func openInFinder() {

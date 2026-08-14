@@ -14,39 +14,60 @@ public struct LaunchSpec: Equatable {
     }
 }
 
-public struct ExternalAppLauncher {
-    private let shell: ShellRunner
-    public init(shell: ShellRunner = ShellRunner()) { self.shell = shell }
+/// 终端候选全部未命中时抛出。
+public struct TerminalLaunchError: LocalizedError {
+    public let terminal: TerminalApp
+    public init(_ terminal: TerminalApp) { self.terminal = terminal }
+    public var errorDescription: String? {
+        "未找到终端应用：\(terminal.displayName)（可先安装或换用其他终端）"
+    }
+}
 
+public struct ExternalAppLauncher {
+    /// ShellRunner 非零退出码不会 throw，回退链要靠 exitCode 判断成败，
+    /// 这里抽成闭包便于测试注入。
+    private let run: (String, [String]) throws -> ShellResult
+
+    public init(shell: ShellRunner = ShellRunner()) {
+        self.run = { try shell.run($0, $1) }
+    }
+
+    /// 测试注入口。
+    public init(run: @escaping (String, [String]) throws -> ShellResult) {
+        self.run = run
+    }
+
+    /// 首选唤起方式；实际 launch 会沿候选链回退，这里只暴露第一步。
     public func launchSpec(for app: ExternalApp, path: URL) -> LaunchSpec {
         switch app {
         case .finder:
             return LaunchSpec(executable: "open", arguments: [path.path])
         case .terminal(let term):
-            let appName: String
-            switch term {
-            case .terminal: appName = "Terminal"
-            case .iterm2:   appName = "iTerm"
-            case .warp:     appName = "Warp"
-            }
-            return LaunchSpec(executable: "open", arguments: ["-a", appName, path.path])
+            return LaunchSpec(executable: "open", arguments: ["-b", term.bundleIDs[0], path.path])
         }
     }
 
     public func launch(_ app: ExternalApp, path: URL) throws {
-        let spec = launchSpec(for: app, path: path)
-        _ = try shell.run(spec.executable, spec.arguments)
+        switch app {
+        case .finder:
+            _ = try run("open", [path.path])
+        case .terminal(let term):
+            try openInTerminal(term, target: path.path)
+        }
+    }
+
+    /// 依次尝试 bundle id 与应用名：兼容同一终端的多个发行版
+    /// （如 Warp stable 是 Warp.app、warp@preview 是 WarpPreview.app）。
+    private func openInTerminal(_ term: TerminalApp, target: String) throws {
+        let attempts: [[String]] =
+            term.bundleIDs.map { ["-b", $0] } + term.appNames.map { ["-a", $0] }
+        for args in attempts {
+            if try run("open", args + [target]).exitCode == 0 { return }
+        }
+        throw TerminalLaunchError(term)
     }
 
     // MARK: 在终端里 resume 助手会话
-
-    private func appName(_ term: TerminalApp) -> String {
-        switch term {
-        case .terminal: return "Terminal"
-        case .iterm2:   return "iTerm"
-        case .warp:     return "Warp"
-        }
-    }
 
     private func resumeArgs(_ kind: AgentKind, sessionId: String) -> String {
         // 会话 id 为 UUID，仍单引号包裹以防意外。
@@ -78,6 +99,6 @@ public struct ExternalAppLauncher {
         try script.write(to: tmp, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o755],
                                               ofItemAtPath: tmp.path)
-        _ = try shell.run("open", ["-a", appName(terminal), tmp.path])
+        try openInTerminal(terminal, target: tmp.path)
     }
 }
