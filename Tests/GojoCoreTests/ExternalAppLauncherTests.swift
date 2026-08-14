@@ -21,7 +21,7 @@ final class ExternalAppLauncherTests: XCTestCase {
 
     /// 首选 bundle id 未装（非零退出码）时应沿候选链回退到 Warp Preview。
     func testWarpPreviewFallback() throws {
-        let stub = ShellStub(failingPrefixes: ["-b dev.warp.Warp-Stable"])
+        let stub = ShellStub(failingPrefixes: [["-b", "dev.warp.Warp-Stable"]])
         let launcher = ExternalAppLauncher(run: stub.call)
         XCTAssertNoThrow(try launcher.launch(.terminal(.warp), path: path))
         XCTAssertEqual(stub.invocations.map { $0.joined(separator: " ") },
