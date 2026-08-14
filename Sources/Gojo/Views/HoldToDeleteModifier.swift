@@ -3,6 +3,8 @@ import SwiftUI
 struct HoldToDeleteModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isPresented = false
+    /// 按压进行中：从按下就开始渐显红框，让等待时长可感知。
+    @State private var isPressing = false
 
     let enabled: Bool
     let trailingInset: CGFloat
@@ -27,16 +29,18 @@ struct HoldToDeleteModifier: ViewModifier {
         }
         .contentShape(Rectangle())
         .overlay {
-            if isPresented {
-                RoundedRectangle(cornerRadius: 12)
-                    .strokeBorder(Color.red.opacity(0.85), lineWidth: 2)
-                    .allowsHitTesting(false)
-                    .transition(.opacity)
-            }
+            RoundedRectangle(cornerRadius: 12)
+                .strokeBorder(Color.red.opacity(strokeOpacity), lineWidth: 2)
+                .allowsHitTesting(false)
+                .animation(reduceMotion ? nil : .easeOut(duration: 0.35), value: isPressing)
         }
-        .scaleEffect(isPresented && !reduceMotion ? 0.985 : 1)
-        .onLongPressGesture(minimumDuration: 0.6) {
+        .scaleEffect(pressScale)
+        // 默认 maximumDistance 仅约 10pt，在滚动容器里按压时轻微漂移即被判失败、
+        // 又被 ScrollView 的 pan 手势抢占；放宽到 80pt 并缩短时长，长按才够灵敏。
+        .onLongPressGesture(minimumDuration: 0.4, maximumDistance: 80) {
             present()
+        } onPressingChanged: { pressing in
+            isPressing = pressing
         }
         .accessibilityAction(named: "显示删除操作") {
             present()
@@ -45,8 +49,23 @@ struct HoldToDeleteModifier: ViewModifier {
         .onChange(of: enabled) { enabled in
             if !enabled {
                 isPresented = false
+                isPressing = false
             }
         }
+    }
+
+    /// 按压时半显、成功后全显的红框透明度。
+    private var strokeOpacity: Double {
+        if isPresented { return 0.85 }
+        if enabled && isPressing { return 0.45 }
+        return 0
+    }
+
+    private var pressScale: CGFloat {
+        guard !reduceMotion else { return 1 }
+        if isPresented { return 0.985 }
+        if enabled && isPressing { return 0.995 }
+        return 1
     }
 
     private var actionTransition: AnyTransition {

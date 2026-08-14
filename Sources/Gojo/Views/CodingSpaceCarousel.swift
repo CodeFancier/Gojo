@@ -46,9 +46,11 @@ struct CodingSpaceCarousel: View {
                     VStack(spacing: 0) {
                         ScrollView(.horizontal, showsIndicators: false) {
                             HStack(spacing: metrics.spacing) {
-                                ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
+                                // 用 ShelfItem 本身当 id：删除中间某张卡后，剩余卡片
+                                // 身份不变；若用下标，会发生视图复用错位、焦点跳变。
+                                ForEach(Array(items.enumerated()), id: \.element) { idx, item in
                                     card(idx, item, proxy: proxy, metrics: metrics)
-                                        .id(idx)
+                                        .id(item)
                                         .background(reporter(idx))
                                 }
                             }
@@ -126,7 +128,7 @@ struct CodingSpaceCarousel: View {
         scrollGen += 1
         let generation = scrollGen
         guard !reduceMotion else {
-            proxy.scrollTo(idx, anchor: .center)
+            proxy.scrollTo(items[idx], anchor: .center)
             DispatchQueue.main.async {
                 if generation == scrollGen {
                     scrollLock = false
@@ -135,7 +137,7 @@ struct CodingSpaceCarousel: View {
             return
         }
         withAnimation(Motion.carousel) {
-            proxy.scrollTo(idx, anchor: .center)
+            proxy.scrollTo(items[idx], anchor: .center)
         }
         Task {
             try? await Task.sleep(for: .milliseconds(620))
@@ -171,7 +173,7 @@ struct CodingSpaceCarousel: View {
         let next = CarouselFocus.clampedIndex(focusIndex + delta, count: items.count)
         focusIndex = next
         withAnimation(reduceMotion ? nil : Motion.domain) {
-            proxy.scrollTo(next, anchor: .center)
+            proxy.scrollTo(items[next], anchor: .center)
         }
     }
 
