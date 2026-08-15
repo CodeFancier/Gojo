@@ -1,15 +1,19 @@
 import SwiftUI
 
-/// 按住进入待删状态：卡片呈现选中效果，右缘滑出垃圾桶图标；
-/// 把卡片拖到垃圾桶上松手即删除，拖到其他位置或原地松手则弹回取消。
+/// 拖动进入待删状态：按下卡片并拖动后右缘滑出垃圾桶图标；
+/// 把卡片拖到垃圾桶上松手即删除，拖到其他位置松手则弹回取消。
 ///
-/// 用 LongPressGesture.sequenced(before: DragGesture) 一条手势链实现
-/// 「按住→拖动」：长按成功即被手势独占，不会在松手时误触发卡片按钮的
-/// 导航动作；拖动事件持续产生输入，也不受静止按压期间渲染挂起的影响。
+/// 用带触发阈值的 DragGesture + highPriorityGesture 实现「拖动→删除」：
+/// 位移超过阈值手势才激活，普通点击仍走卡片按钮；手势一旦激活，
+/// 松手不会误触发按钮的导航动作。此前 LongPressGesture.sequenced(before:)
+/// 在 macOS 的 Button + ScrollView 组合下进不了识别（垃圾桶不出现、卡片
+/// 拖不动），故弃用。
 struct HoldToDeleteModifier: ViewModifier {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isArmed = false
     @State private var dragTranslation: CGSize = .zero
+    /// 进入待删态那一刻的平移量：从该点起算增量，卡片不因越过阈值而跳一下。
+    @State private var armOrigin: CGSize = .zero
     @State private var dragLocation: CGPoint?
     @State private var trashFrame: CGRect = .zero
 
@@ -18,7 +22,6 @@ struct HoldToDeleteModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .allowsHitTesting(!isArmed)
             // 选中态红框：悬停垃圾桶时加浓提示即将删除
             .overlay {
                 if isArmed {
@@ -28,7 +31,7 @@ struct HoldToDeleteModifier: ViewModifier {
                 }
             }
             .scaleEffect(pressScale)
-            .offset(isArmed ? dragTranslation : .zero)
+            .offset(isArmed ? effectiveTranslation : .zero)
             // 垃圾桶挂在 offset 之后：卡片拖走，垃圾桶留在原地等投放
             .overlay(alignment: .trailing) {
                 if isArmed {
@@ -39,11 +42,11 @@ struct HoldToDeleteModifier: ViewModifier {
                 }
             }
             .contentShape(Rectangle())
-            .gesture(holdAndDrag)
+            .highPriorityGesture(dragToTrash)
             .accessibilityAction(named: "删除") {
                 onDelete()
             }
-            .help(enabled ? "按住卡片，拖到垃圾桶上松手删除" : "")
+            .help(enabled ? "拖动卡片到垃圾桶上松手删除" : "")
             .onChange(of: enabled) { enabled in
                 if !enabled { reset() }
             }
@@ -51,47 +54,42 @@ struct HoldToDeleteModifier: ViewModifier {
 
     // MARK: 手势
 
-    private var holdAndDrag: some Gesture {
-        LongPressGesture(minimumDuration: 0.35, maximumDistance: 80)
-            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+    private var dragToTrash: some Gesture {
+        DragGesture(minimumDistance: HoldToDeleteModel.armThreshold,
+                    coordinateSpace: .global)
             .onChanged { value in
-                switch value {
-                case .first(true):
-                    guard enabled, !isArmed else { return }
-                    // 同步置位、不包动画：静止按压期间的状态变更会被挂起到
-                    // 下一次输入事件才刷新（见 present() 时期的历史教训）。
-                    // 新交互里用户接下来必然拖动，拖动事件会立即补上渲染。
-                    isArmed = true
-                case .second(true, let drag?):
-                    dragTranslation = drag.translation
-                    dragLocation = drag.location
-                default:
-                    break
+                guard enabled else { return }
+                if !isArmed {
+                    armOrigin = value.translation
+                    withAnimation(reduceMotion ? nil : Motion.dropZone) {
+                        isArmed = true
+                    }
                 }
+                dragTranslation = value.translation
+                dragLocation = value.location
             }
             .onEnded { value in
-                switch value {
-                case .second(true, let drag?):
-                    if dropTarget.contains(drag.location) {
-                        reset()
-                        onDelete()
-                    } else {
-                        cancel()
-                    }
-                default:
+                guard isArmed else { return }
+                if model.hitsTrash(value.location) {
+                    reset()
+                    onDelete()
+                } else {
                     cancel()
                 }
             }
     }
 
-    /// 垃圾桶命中区域：图标外扩一圈，降低投放精度要求。
-    private var dropTarget: CGRect {
-        trashFrame.insetBy(dx: -14, dy: -14)
+    private var model: HoldToDeleteModel {
+        HoldToDeleteModel(trashFrame: trashFrame)
+    }
+
+    private var effectiveTranslation: CGSize {
+        CGSize(width: dragTranslation.width - armOrigin.width,
+               height: dragTranslation.height - armOrigin.height)
     }
 
     private var hoveringTrash: Bool {
-        guard isArmed, let loc = dragLocation else { return false }
-        return dropTarget.contains(loc)
+        isArmed && model.hitsTrash(dragLocation)
     }
 
     // MARK: 待删态视觉
@@ -134,6 +132,7 @@ struct HoldToDeleteModifier: ViewModifier {
     private func reset() {
         isArmed = false
         dragTranslation = .zero
+        armOrigin = .zero
         dragLocation = nil
     }
 }

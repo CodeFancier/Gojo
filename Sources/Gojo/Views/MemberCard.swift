@@ -1,7 +1,7 @@
 import SwiftUI
 import GojoCore
 
-/// 编码空间里的成员卡：图标 + 名 + 分支；长按显示统一删除操作。
+/// 编码空间里的成员卡：图标 + 名 + 分支；拖动到垃圾桶显示统一删除操作。
 /// 进行中时角标位置换成进度指示器，操作禁用。
 struct MemberCard: View {
     @EnvironmentObject var state: AppState
