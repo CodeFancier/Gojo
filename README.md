@@ -12,7 +12,7 @@
   <img alt="Platform" src="https://img.shields.io/badge/macOS-13.0%2B-111827?style=flat-square&logo=apple&logoColor=white">
   <img alt="Swift" src="https://img.shields.io/badge/Swift-5.9-3B82F6?style=flat-square&logo=swift&logoColor=white">
   <img alt="UI" src="https://img.shields.io/badge/UI-SwiftUI-60A5FA?style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/version-0.1.0-374151?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/version-0.1.6-374151?style=flat-square">
 </p>
 
 ---
@@ -108,20 +108,26 @@ Gojo 不会接管你的 Git 仓库，也不要求特殊的工程格式。它只�
 
 ## 快速开始
 
-### 环境要求
+### 方式一：下载 DMG（无需开发环境）
 
-- macOS 13 Ventura 或更高版本
-- Swift 5.9 或更高版本
-- Git
-- 可选：Claude Code 和 / 或 Codex CLI，用于读取与恢复助手会话
+1. 从 [Releases](https://github.com/CodeFancier/Gojo/releases) 下载最新的 `Gojo-x.x.x.dmg`。
+2. 打开镜像，把 Gojo 拖入「应用程序」文件夹。
+3. 首次打开需要放行未知开发者：Gojo 目前只做本地 ad-hoc 签名，未经 Apple 公证，Gatekeeper 会提示「无法验证开发者」。在 Finder 中右键 Gojo 选择「打开」，或到「系统设置 → 隐私与安全性」点击「仍要打开」，之后即可正常启动。
 
-### 从源码运行
+### 方式二：用脚本本地打包
+
+需要 macOS 13+、Xcode（含命令行工具）与 Git：
 
 ```bash
-swift run
+git clone https://github.com/CodeFancier/Gojo.git
+cd Gojo
+./Scripts/package-app.sh
+open build/Gojo.app
 ```
 
-第一次进入 Gojo 后：
+脚本会执行 Release 构建、组装 `Gojo.app` 并进行本地 ad-hoc 签名。开发调试可用 `swift run` 直接从源码启动，`swift test` 运行测试；需要分发镜像时用 `./Scripts/make-dmg.sh` 生成 DMG。
+
+### 首次进入
 
 1. 打开底部的「公共空间」，指定一个用于集中保存共享仓库的文件夹。
 2. 添加仓库名称与 Git URL，并在需要时点击 Clone。
@@ -129,23 +135,6 @@ swift run
 4. 进入编码空间，搜索并拖起公共项目。
 5. 投放到「Git 克隆」或「软链接」区域，完成领域编排。
 6. 在成员卡片上同步、切换分支、转换模式，或打开 Claude / Codex 历史会话。
-
-### 构建 macOS App
-
-```bash
-./Scripts/package-app.sh
-open build/Gojo.app
-```
-
-脚本会执行 Release 构建、组装 `Gojo.app` 并进行本地 ad-hoc 签名。当前项目尚未提供经过 Apple 公证的正式发行包，首次打开时可能需要在 Finder 中右键选择「打开」。
-
-如需生成 DMG：
-
-```bash
-./Scripts/make-dmg.sh
-```
-
-安装了 `create-dmg` 时脚本会生成带 Applications 快捷入口的镜像；否则自动回退到 macOS 自带的 `hdiutil`。
 
 ## 常用操作
 
@@ -158,33 +147,10 @@ open build/Gojo.app
 | 切换分支 | 悬停 Git 成员卡片，打开分支选择器 |
 | 恢复 AI 编码现场 | 点击成员卡片或领域顶栏中的 Claude / Codex 按钮 |
 | 直接进入命令行或文件目录 | 使用领域顶栏的终端 / Finder 按钮 |
-| 移除一个编码空间 | 长按空间卡片，选择只取消登记或移入废纸篓 |
-
-## 技术栈与结构
-
-Gojo 使用 SwiftUI 构建界面，AppKit 处理文件选择、窗口细节和外部应用衔接，核心工作区逻辑保持在独立的 `GojoCore` target 中。
-
-```text
-Gojo/
-├── Sources/Gojo/             # SwiftUI 应用、领域界面与交互
-├── Sources/GojoCore/         # 清单模型、Git、文件系统与工作区逻辑
-├── Tests/                    # Core 与界面辅助逻辑测试
-├── Scripts/                  # 图标、App 与 DMG 构建脚本
-└── BrandAssets/              # Logo、字标和 macOS 图标源文件
-```
-
-运行测试：
-
-```bash
-swift test
-```
+| 移除一个编码空间 | 拖动空间卡片到垃圾桶图标，选择只取消登记或移入废纸篓 |
 
 ## 当前状态
 
-Gojo 目前处于 `0.1.0` 早期开发阶段，核心工作流已经可用，但界面、清单结构和分发方式仍可能继续演进。建议先在可恢复的仓库与目录中体验，并照常保持 Git 提交和重要文件备份。
+Gojo 目前处于 `0.1.x` 早期开发阶段，核心工作流已经可用，但界面、清单结构和分发方式仍可能继续演进。建议先在可恢复的仓库与目录中体验，并照常保持 Git 提交和重要文件备份。
 
 如果你也想拥有一片更清晰的编码领域，欢迎试用、提出建议，或一起完善它。
-
-<p align="center">
-  <strong>術式順転「蒼」—— 把散落的项目，全部聚合到 Gojo。</strong>
-</p>
