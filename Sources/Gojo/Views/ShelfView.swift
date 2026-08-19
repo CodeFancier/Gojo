@@ -49,7 +49,7 @@ struct ShelfView: View {
             Button {
                 state.startWorkspaceScan()
             } label: {
-                Label("扫描工作空间", systemImage: "rectangle.and.text.magnifyingglass")
+                Label("搜索已存在项目", systemImage: "rectangle.and.text.magnifyingglass")
                     .labelStyle(.iconOnly)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Color.textSecondary)
@@ -57,7 +57,7 @@ struct ShelfView: View {
                     .background(Color.lightBlue.opacity(0.12), in: Circle())
             }
             .buttonStyle(.plain)
-            .help("扫描本机 Claude Code / Codex 工作空间")
+            .help("搜索编码空间根目录下的已存在项目，登记为独立编码空间")
             .padding(.trailing, 16)
             .padding(.top, 12)
         }

@@ -6,7 +6,7 @@ struct WorkspaceScanResultRow: View {
     let phase: WorkspaceScanPhase
     var onToggle: () -> Void = {}
 
-    private var project: DiscoveredAgentProject { result.project }
+    private var project: ExistingProjectFolder { result.project }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -18,9 +18,8 @@ struct WorkspaceScanResultRow: View {
         .padding(.vertical, 4)
         .contentShape(Rectangle())
         .onTapGesture {
-            if phase == .review, project.exists { onToggle() }
+            if phase == .review { onToggle() }
         }
-        .opacity(project.exists ? 1 : 0.6)
         .accessibilityElement(children: .combine)
     }
 
@@ -43,26 +42,21 @@ struct WorkspaceScanResultRow: View {
             HStack(spacing: 6) {
                 Text(project.name)
                     .font(.body)
-                    .foregroundStyle(project.exists ? Color.primary : Color.textTertiary)
-                ForEach(Array(project.kinds).sorted(by: { $0.rawValue < $1.rawValue }), id: \.self) { kind in
-                    kindBadge(kind)
+                    .foregroundStyle(Color.primary)
+                if project.isGitRepository {
+                    gitBadge
                 }
             }
-            Text(project.path.path)
+            Text(project.url.path)
                 .font(.caption)
                 .foregroundStyle(Color.textTertiary)
                 .lineLimit(1)
                 .truncationMode(.middle)
-            if !project.exists {
-                Text("项目已不在磁盘上，无法导入")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
         }
     }
 
-    private func kindBadge(_ kind: AgentKind) -> some View {
-        Text(kind.rawValue.capitalized)
+    private var gitBadge: some View {
+        Text("Git")
             .font(.caption2.weight(.semibold))
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
@@ -73,14 +67,14 @@ struct WorkspaceScanResultRow: View {
     @ViewBuilder private var statusView: some View {
         switch result.status {
         case .idle:
-            Text("\(project.sessionCount) 个会话")
+            Text("待登记")
                 .font(.caption)
                 .foregroundStyle(Color.textTertiary)
-        case .linking:
+        case .registering:
             ProgressView().controlSize(.small)
-                .accessibilityLabel("正在创建链接")
-        case .linked:
-            Label("已加入", systemImage: "checkmark.circle.fill")
+                .accessibilityLabel("正在登记")
+        case .registered:
+            Label("已登记", systemImage: "checkmark.circle.fill")
                 .font(.caption)
                 .foregroundStyle(.green)
         case .failed(let msg):

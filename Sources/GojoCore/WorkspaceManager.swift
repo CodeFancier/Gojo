@@ -13,6 +13,7 @@ public enum WorkspaceError: Error, Equatable {
     case unsafePublicProjectPath(String)
     case nestedPublicProjectNotFound(String)
     case codingSpaceNotFound(String)
+    case codingSpaceFolderMissing(String)
     case unsafeCodingSpacePath(String)
 }
 
@@ -211,6 +212,26 @@ public final class WorkspaceManager {
 
     public func codingSpaceRootURL() -> URL? {
         store.loadIndex().codingSpaceRootPath.map(URL.init(fileURLWithPath:))
+    }
+
+    /// 列出根目录下可登记为编码空间的已存在文件夹：非隐藏、未登记的直接子目录。
+    /// 不筛 .git——编码空间成员本就允许非 git 项目，登记门槛保持一致。
+    public func existingProjectFolders(underRoot root: URL) throws -> [ExistingProjectFolder] {
+        let registered = Set(store.loadIndex().codingSpacePaths.map {
+            URL(fileURLWithPath: $0).standardizedFileURL.path
+        })
+        let entries = (try? fm.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles])) ?? []
+        return entries.compactMap { entry -> ExistingProjectFolder? in
+            guard entry.lastPathComponent != ".gojo" else { return nil }
+            guard (try? entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
+                  !registered.contains(entry.standardizedFileURL.path) else { return nil }
+            return ExistingProjectFolder(
+                url: entry,
+                isGitRepository: fm.fileExists(atPath: entry.appendingPathComponent(".git").path))
+        }
+        .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     /// 计算目录下不冲突的文件夹名：与磁盘已有项或 usedNames 重名时追加 _2/_3。

@@ -43,9 +43,9 @@ struct WorkspaceScanSheet: View {
 
     private func title(for session: WorkspaceScanSession) -> String {
         switch session.phase {
-        case .scanning: "正在扫描工作空间"
-        case .review: "发现 \(session.discoveredCount) 个项目"
-        case .importing: "正在导入到「\(session.spaceName)」"
+        case .scanning: "正在搜索已存在项目"
+        case .review: "发现 \(session.discoveredCount) 个文件夹"
+        case .importing: "正在登记 \(session.selectedForImport.count) 个编码空间"
         case .finished: session.hasFailures ? "部分项目未导入" : "导入完成"
         }
     }
@@ -53,35 +53,27 @@ struct WorkspaceScanSheet: View {
     private func message(for session: WorkspaceScanSession) -> String {
         switch session.phase {
         case .scanning:
-            "正在读取 Claude Code 与 Codex 的本机会话记录，反推所有曾用过的项目路径。"
+            "正在列出编码空间根目录下的文件夹。"
         case .review:
-            "勾选要纳入的项目，它们会以软链接形式加入一个新的编码空间——原文件不会被移动。"
+            "勾选要纳入的文件夹，每个都会原位登记为独立编码空间——只在其内写入 .gojo 清单，原文件不会被移动或复制。"
         case .importing:
-            "正在逐项创建符号链接，请不要关闭窗口。"
+            "正在逐个登记，请不要关闭窗口。"
         case .finished:
             session.hasFailures
-                ? "部分项目未能创建链接，请查看列表中的失败项。"
-                : "所选项目已加入新编码空间。"
+                ? "部分文件夹未能登记，请查看列表中的失败项。"
+                : "所选文件夹已登记为独立编码空间。"
         }
     }
 
     @ViewBuilder
     private func reviewControls(for session: WorkspaceScanSession) -> some View {
-        let existCount = session.results.filter { $0.project.exists }.count
-        let selectedCount = session.results.filter { $0.isSelected }.count
-        let allSelected = existCount > 0 && selectedCount >= existCount
+        let selectedCount = session.selectedForImport.count
+        let allSelected = !session.results.isEmpty && selectedCount >= session.results.count
         HStack(spacing: 12) {
             Button(allSelected ? "取消全选" : "全选") {
                 state.selectAllScanResults(!allSelected)
             }
             Spacer()
-            Text("编码空间名称")
-                .font(.caption)
-                .foregroundStyle(Color.textTertiary)
-            TextField("已发现项目", text: Binding(
-                get: { session.spaceName },
-                set: { state.setSpaceName($0) }))
-                .frame(width: 220)
         }
     }
 
@@ -92,12 +84,12 @@ struct WorkspaceScanSheet: View {
             VStack(spacing: 8) {
                 if session.phase == .scanning {
                     ProgressView().controlSize(.small)
-                    Text("正在扫描…").font(.caption).foregroundStyle(Color.textTertiary)
+                    Text("正在搜索…").font(.caption).foregroundStyle(Color.textTertiary)
                 } else {
                     Image(systemName: "sparkles")
                         .font(.title)
                         .foregroundStyle(Color.textTertiary)
-                    Text("没有发现 Claude Code 或 Codex 的工作空间")
+                    Text("根目录下没有可登记的文件夹")
                         .font(.caption)
                         .foregroundStyle(Color.textTertiary)
                 }
@@ -114,7 +106,7 @@ struct WorkspaceScanSheet: View {
             HStack {
                 Spacer()
                 ProgressView().controlSize(.small)
-                Text("扫描中").foregroundStyle(Color.textTertiary)
+                Text("搜索中").foregroundStyle(Color.textTertiary)
             }
         case .review:
             HStack {
@@ -131,7 +123,7 @@ struct WorkspaceScanSheet: View {
             HStack {
                 Spacer()
                 ProgressView().controlSize(.small)
-                Text("正在创建链接").foregroundStyle(Color.textTertiary)
+                Text("正在登记").foregroundStyle(Color.textTertiary)
             }
         case .finished:
             HStack {

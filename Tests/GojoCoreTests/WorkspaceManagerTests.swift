@@ -469,6 +469,37 @@ final class WorkspaceManagerTests: XCTestCase {
             atPath: existing.appendingPathComponent(".gojo").path))
     }
 
+    func testExistingProjectFoldersListsUnregisteredDirectories() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let root = sandbox.appendingPathComponent("spaces")
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("beta"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("alpha"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent("alpha/.git"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(
+            at: root.appendingPathComponent(".hidden"), withIntermediateDirectories: true)
+        try "f".write(to: root.appendingPathComponent("file.txt"), atomically: true, encoding: .utf8)
+
+        let folders = try mgr.existingProjectFolders(underRoot: root)
+
+        // 隐藏目录与文件不列；按名排序；.git 只作徽标不影响收录
+        XCTAssertEqual(folders.map { $0.name }, ["alpha", "beta"])
+        XCTAssertEqual(folders.first { $0.name == "alpha" }?.isGitRepository, true)
+        XCTAssertEqual(folders.first { $0.name == "beta" }?.isGitRepository, false)
+    }
+
+    func testExistingProjectFoldersExcludesRegisteredCodingSpaces() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let root = sandbox.appendingPathComponent("spaces")
+        let ws = root.appendingPathComponent("ws")
+        try FileManager.default.createDirectory(at: ws, withIntermediateDirectories: true)
+        try mgr.createCodingSpace(name: "ws", at: ws)   // 已登记为编码空间
+
+        XCTAssertTrue(try mgr.existingProjectFolders(underRoot: root).isEmpty)
+    }
+
     func testSanitizedFolderName() {
         XCTAssertEqual(WorkspaceManager.sanitizedFolderName("  a/b  "), "a-b")
         XCTAssertEqual(WorkspaceManager.sanitizedFolderName("a:b"), "a-b")
