@@ -631,6 +631,40 @@ final class WorkspaceManagerTests: XCTestCase {
         XCTAssertEqual(target, external.path)
     }
 
+    func testScanMembersRecognizesExternalSymlinkWithoutGit() throws {
+        // Claude/Codex 扫描发现的项目常无 .git：导入端不设门槛，
+        // 扫描端也必须收录，否则导入“成功”后空间是空壳。
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let plain = sandbox.appendingPathComponent("notes")
+        try FileManager.default.createDirectory(
+            at: plain.appendingPathComponent("sub"), withIntermediateDirectories: true)
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+
+        try mgr.linkExternalProject(into: ws, folderName: "notes", target: plain)
+
+        let members = try mgr.scanMembers(in: ws)
+        XCTAssertEqual(members.map { $0.folderName }, ["notes"])
+        guard case .externalSymlink(let target) = members.first?.form else {
+            XCTFail("期望 .externalSymlink，得到 \(String(describing: members.first?.form))")
+            return
+        }
+        XCTAssertEqual(target, plain.path)
+        XCTAssertNil(members.first?.branch)   // 非 git 目标读不到分支
+    }
+
+    func testScanMembersSkipsBrokenExternalSymlink() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let external = sandbox.appendingPathComponent("gone")
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        let ws = sandbox.appendingPathComponent("ws")
+        try mgr.createCodingSpace(name: "ws", at: ws)
+        try mgr.linkExternalProject(into: ws, folderName: "gone", target: external)
+        try FileManager.default.removeItem(at: external)   // 目标先于扫描被移走
+
+        XCTAssertTrue(try mgr.scanMembers(in: ws).isEmpty)
+    }
+
     func testLinkExternalProjectRefusesNameCollision() throws {
         let (mgr, _, sandbox) = try makeWithPublicSpace()
         let external = try TestSupport.makeLocalGitRepo(named: "app", in: sandbox)

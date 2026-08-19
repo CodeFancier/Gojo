@@ -72,7 +72,7 @@ struct ShelfCard: View {
     }
 
     private var subtitle: some View {
-        Text("\(members.count) 个仓库")
+        Text("\(members.count) 个项目")
             .font(.subheadline)
             .foregroundStyle(Color.textTertiary)
     }

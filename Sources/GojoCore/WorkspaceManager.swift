@@ -360,11 +360,14 @@ public final class WorkspaceManager {
                 if let b = bound, b.mode == .symlink {
                     form = .publicSymlink(b.publicProjectId)
                 } else if let target = resolvedSymlinkTarget(entry),
-                          fm.fileExists(atPath: target.appendingPathComponent(".git").path) {
-                    // 未绑定、但指向外部含 .git 仓库的符号链接（如一键扫描导入的成员）
+                          isExistingDirectory(target) {
+                    // 未绑定、指向外部现存目录的符号链接（如一键扫描导入的成员）。
+                    // 不要求目标含 .git：Claude/Codex 项目常非 git 仓库，导入端
+                    // （linkExternalProject）同样不设此门槛，两端必须一致，否则
+                    // 导入“成功”后成员被扫描悄悄过滤，空间沦为空壳。
                     form = .externalSymlink(target.path)
                 } else {
-                    continue   // 其余未知符号链接，跳过
+                    continue   // 失效链接或指向非目录，跳过
                 }
             } else {
                 guard fm.fileExists(atPath: entry.appendingPathComponent(".git").path) else { continue }
@@ -504,6 +507,12 @@ public final class WorkspaceManager {
         return dest.hasPrefix("/")
             ? URL(fileURLWithPath: dest)
             : linkURL.deletingLastPathComponent().appendingPathComponent(dest)
+    }
+
+    /// 目标是否为磁盘上现存的目录（fileExists 对失效链接返回 false，天然过滤）。
+    private func isExistingDirectory(_ url: URL) -> Bool {
+        var isDir: ObjCBool = false
+        return fm.fileExists(atPath: url.path, isDirectory: &isDir) && isDir.boolValue
     }
 
     private func isDirectChild(_ child: URL, of parent: URL) -> Bool {
