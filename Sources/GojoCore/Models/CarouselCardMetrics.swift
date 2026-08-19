@@ -1,4 +1,8 @@
+// CGFloat/CGSize 在 Apple 平台来自 CoreGraphics，Linux（corelibs-foundation）来自 Foundation。
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
+import Foundation
 
 public struct CarouselCardMetrics: Equatable, Sendable {
     public let focusedSize: CGSize

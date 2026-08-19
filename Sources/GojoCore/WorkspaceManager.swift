@@ -85,7 +85,7 @@ public final class WorkspaceManager {
             .standardizedFileURL
         try validatePublicProjectPath(projectURL, in: space)
         if itemExists(at: projectURL) {
-            try fm.trashItem(at: projectURL, resultingItemURL: nil)
+            try trash(at: projectURL)
         }
 
         manifest.projects.removeAll { $0.id == id }
@@ -359,7 +359,7 @@ public final class WorkspaceManager {
         }
         // 删除确认后，文件仍可能被用户或其他进程先一步移走。此时目标状态已经达成。
         guard itemExists(at: itemURL) else { return }
-        try fm.trashItem(at: itemURL, resultingItemURL: nil)
+        try trash(at: itemURL)
     }
 
     /// 扫描直接子文件夹，识别成员形态并实时读分支。
@@ -542,6 +542,16 @@ public final class WorkspaceManager {
 
     private func itemExists(at url: URL) -> Bool {
         (try? fm.attributesOfItem(atPath: url.path)) != nil
+    }
+
+    /// macOS 移入废纸篓；Linux 的 corelibs-foundation 无 trashItem，退化为直接删除
+    /// （仅影响 Linux 上的本地验证构建，产品只发 macOS）。
+    private func trash(at url: URL) throws {
+        #if os(macOS)
+        try fm.trashItem(at: url, resultingItemURL: nil)
+        #else
+        try fm.removeItem(at: url)
+        #endif
     }
 
     private func validateDestructiveCodingSpace(_ codingSpace: URL) throws {

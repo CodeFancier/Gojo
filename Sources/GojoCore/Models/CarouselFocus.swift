@@ -1,4 +1,8 @@
+// CGFloat 在 Apple 平台来自 CoreGraphics，Linux（corelibs-foundation）来自 Foundation。
+#if canImport(CoreGraphics)
 import CoreGraphics
+#endif
+import Foundation
 
 /// 展示柜焦点计算：给定各卡中心 x 与视口中心 x，算出焦点索引。
 public enum CarouselFocus {
