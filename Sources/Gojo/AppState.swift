@@ -14,6 +14,7 @@ final class AppState: ObservableObject {
     @Published var errorMessage: String?
     @Published var codingSpaceDeletionSession: CodingSpaceDeletionSession?
     @Published var workspaceScanSession: WorkspaceScanSession?
+    @Published var codingSpaceNamingSession: CodingSpaceNamingSession?
 
     let manager: WorkspaceManager
     let store: ConfigStore
@@ -91,6 +92,20 @@ final class AppState: ObservableObject {
 
     var publicSpaceFolder: URL? { try? manager.publicSpaceURL() }
 
+    // MARK: 编码空间根目录
+    var codingSpaceRoot: URL? { manager.codingSpaceRootURL() }
+    func chooseAndSetCodingSpaceRoot() {
+        guard let url = pickFolder(message: "选择编码空间根目录") else { return }
+        run { try manager.setCodingSpaceRoot(url) }
+    }
+    func clearCodingSpaceRoot() {
+        run { try manager.clearCodingSpaceRoot() }
+    }
+    func openCodingSpaceRootInFinder() {
+        guard let root = codingSpaceRoot else { return }
+        run { try launcher.launch(.finder, path: root) }
+    }
+
     // MARK: 公共空间
     func chooseAndSetPublicSpace() {
         guard let url = pickFolder(message: "选择公共空间文件夹") else { return }
@@ -123,10 +138,30 @@ final class AppState: ObservableObject {
     }
 
     // MARK: 编码空间
+    /// 新建编码空间：已设根目录 → 只弹命名 sheet，确认后在根目录下建同名文件夹；
+    /// 未设根目录 → 保持 NSOpenPanel 选目录流程。
     func createCodingSpace() {
-        guard let url = pickFolder(message: "选择/新建编码空间文件夹") else { return }
-        run { try manager.createCodingSpace(name: url.lastPathComponent, at: url) }
+        if manager.codingSpaceRootURL() != nil {
+            codingSpaceNamingSession = CodingSpaceNamingSession()
+        } else {
+            guard let url = pickFolder(message: "选择/新建编码空间文件夹") else { return }
+            run { try manager.createCodingSpace(name: url.lastPathComponent, at: url) }
+        }
     }
+    /// 命名 sheet 确认：在根目录下创建空间（重名自动 _2/_3）。
+    func confirmCodingSpaceCreation() {
+        guard let session = codingSpaceNamingSession else { return }
+        let name = WorkspaceManager.sanitizedFolderName(session.name)
+        guard !name.isEmpty else { return }
+        codingSpaceNamingSession = nil
+        let manager = self.manager
+        run {
+            guard let root = manager.codingSpaceRootURL() else { return }
+            _ = try manager.createCodingSpace(named: name, underRoot: root)
+        }
+    }
+    func dismissCodingSpaceNaming() { codingSpaceNamingSession = nil }
+    func setCodingSpaceName(_ name: String) { codingSpaceNamingSession?.name = name }
     func removeCodingSpace(_ space: URL, mode: CodingSpaceRemovalMode) {
         let manager = self.manager
         runAsync(space: space, folder: "__coding_space__") {
@@ -360,21 +395,34 @@ final class AppState: ObservableObject {
     }
 
     /// 把勾选的项目批量软链接进一个新建编码空间。
+    /// 已设根目录时不再弹 NSOpenPanel，直接建在根目录下（重名自动 _2/_3）。
     func importScannedWorkspaces() {
         guard let session = workspaceScanSession else { return }
         let targets = session.selectedForImport
         guard !targets.isEmpty else { return }
-        guard let spaceURL = pickFolder(message: "选择/新建编码空间文件夹") else { return }
-        let trimmed = session.spaceName.trimmingCharacters(in: .whitespaces)
-        let name = trimmed.isEmpty ? "已发现项目" : trimmed
+        let root = manager.codingSpaceRootURL()
+        var pickedURL: URL?
+        if root == nil {
+            guard let picked = pickFolder(message: "选择/新建编码空间文件夹") else { return }
+            pickedURL = picked
+        }
+        let sanitized = WorkspaceManager.sanitizedFolderName(session.spaceName)
+        let name = sanitized.isEmpty ? "已发现项目" : sanitized
         let sessionID = session.id
         workspaceScanSession?.phase = .importing
         let manager = self.manager
 
         asyncQueue.async { [weak self] in
             var setupError: String?
+            var spaceURL: URL?
             do {
-                try manager.createCodingSpace(name: name, at: spaceURL)
+                if let root {
+                    spaceURL = try manager.createCodingSpace(named: name, underRoot: root)
+                } else if let picked = pickedURL {
+                    // 未设根目录的旧流程：清单名沿用 sheet 里输入的空间名
+                    try manager.createCodingSpace(name: name, at: picked)
+                    spaceURL = picked
+                }
             } catch {
                 setupError = "\(error)"
             }
@@ -388,6 +436,7 @@ final class AppState: ObservableObject {
                 }
                 return
             }
+            guard let spaceURL else { return }
 
             var usedNames = Set<String>()
             for result in targets {

@@ -193,6 +193,62 @@ public final class WorkspaceManager {
             parentRelativePath: parentFolderName, projectName: projectName)
     }
 
+    // MARK: - 编码空间根目录
+
+    /// 指定/更新编码空间根目录；之后新建空间默认创建在其下。
+    public func setCodingSpaceRoot(_ url: URL) throws {
+        var index = store.loadIndex()
+        index.codingSpaceRootPath = url.path
+        try store.saveIndex(index)
+    }
+
+    /// 清除编码空间根目录；已登记的空间不受影响。
+    public func clearCodingSpaceRoot() throws {
+        var index = store.loadIndex()
+        index.codingSpaceRootPath = nil
+        try store.saveIndex(index)
+    }
+
+    public func codingSpaceRootURL() -> URL? {
+        store.loadIndex().codingSpaceRootPath.map(URL.init(fileURLWithPath:))
+    }
+
+    /// 计算目录下不冲突的文件夹名：与磁盘已有项或 usedNames 重名时追加 _2/_3。
+    /// 与扫描导入的内联去重约定一致（fileExists 对同名文件与目录都成立）。
+    public static func uniqueCodingSpaceFolderName(base: String,
+                                                   in directory: URL,
+                                                   usedNames: Set<String> = []) -> String {
+        var name = base
+        var suffix = 2
+        while usedNames.contains(name)
+                || FileManager.default.fileExists(
+                    atPath: directory.appendingPathComponent(name).path) {
+            name = "\(base)_\(suffix)"
+            suffix += 1
+        }
+        return name
+    }
+
+    /// 清洗用户输入的空间名：去首尾空白、替换路径分隔符与冒号、去掉前导点（防隐藏目录）。
+    /// 清洗后可能为空串，由调用方据此禁用确认操作。
+    public static func sanitizedFolderName(_ raw: String) -> String {
+        var name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "/", with: "-")
+            .replacingOccurrences(of: ":", with: "-")
+        while name.hasPrefix(".") { name.removeFirst() }
+        return name
+    }
+
+    /// 在根目录下创建编码空间（重名自动 _2/_3），返回实际创建的空间 URL。
+    /// 清单名沿用「名称 = 文件夹名」的既有约定（同 NSOpenPanel 流程）。
+    @discardableResult
+    public func createCodingSpace(named name: String, underRoot root: URL) throws -> URL {
+        let folder = Self.uniqueCodingSpaceFolderName(base: name, in: root)
+        let url = root.appendingPathComponent(folder)
+        try createCodingSpace(name: folder, at: url)
+        return url
+    }
+
     // MARK: - 编码空间
 
     public func createCodingSpace(name: String, at url: URL) throws {

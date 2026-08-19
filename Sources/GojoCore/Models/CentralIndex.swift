@@ -1,7 +1,7 @@
 import Foundation
 
 public enum TerminalApp: String, Codable, CaseIterable {
-    case terminal, iterm2, warp
+    case terminal, iterm2, warp, otty
 }
 
 public extension TerminalApp {
@@ -11,6 +11,7 @@ public extension TerminalApp {
         case .terminal: return "Terminal"
         case .iterm2: return "iTerm2"
         case .warp: return "Warp"
+        case .otty: return "Otty"
         }
     }
 
@@ -21,6 +22,7 @@ public extension TerminalApp {
         case .terminal: return ["com.apple.Terminal"]
         case .iterm2: return ["com.googlecode.iterm2"]
         case .warp: return ["dev.warp.Warp-Stable", "dev.warp.Warp-Preview"]
+        case .otty: return ["io.appmakes.otty"]
         }
     }
 
@@ -30,19 +32,24 @@ public extension TerminalApp {
         case .terminal: return ["Terminal"]
         case .iterm2: return ["iTerm", "iTerm2"]
         case .warp: return ["Warp", "WarpPreview"]
+        case .otty: return ["Otty"]
         }
     }
 }
 
 public struct CentralIndex: Codable, Equatable {
     public var publicSpacePath: String?
+    /// 编码空间根目录：指定后，新建/扫描导入的编码空间自动创建在其下。
+    public var codingSpaceRootPath: String?
     public var codingSpacePaths: [String]
     public var terminalPreference: TerminalApp
 
     public init(publicSpacePath: String? = nil,
+                codingSpaceRootPath: String? = nil,
                 codingSpacePaths: [String] = [],
                 terminalPreference: TerminalApp = .terminal) {
         self.publicSpacePath = publicSpacePath
+        self.codingSpaceRootPath = codingSpaceRootPath
         self.codingSpacePaths = codingSpacePaths
         self.terminalPreference = terminalPreference
     }

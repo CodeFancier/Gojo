@@ -9,11 +9,33 @@ final class ConfigStoreTests: XCTestCase {
         XCTAssertNil(index.publicSpacePath)
 
         index.publicSpacePath = "/tmp/public"
+        index.codingSpaceRootPath = "/tmp/root"
         index.codingSpacePaths = ["/tmp/ws1"]
         index.terminalPreference = .iterm2
         try store.saveIndex(index)
 
         XCTAssertEqual(ConfigStore(baseDirectory: base).loadIndex(), index)
+    }
+
+    /// 磁盘上真实旧版 index.json（无 codingSpaceRootPath key）加载后新字段为 nil，旧字段完好。
+    func testLegacyIndexOnDiskLoads() throws {
+        let base = try TestSupport.makeTempDir()
+        try """
+        {
+          "codingSpacePaths" : [
+            "/tmp/ws1"
+          ],
+          "publicSpacePath" : "/tmp/public",
+          "terminalPreference" : "terminal"
+        }
+        """.write(to: base.appendingPathComponent("index.json"),
+                  atomically: true, encoding: .utf8)
+
+        let index = ConfigStore(baseDirectory: base).loadIndex()
+
+        XCTAssertEqual(index.publicSpacePath, "/tmp/public")
+        XCTAssertEqual(index.codingSpacePaths, ["/tmp/ws1"])
+        XCTAssertNil(index.codingSpaceRootPath)
     }
 
     func testPublicSpaceManifestRoundTrip() throws {

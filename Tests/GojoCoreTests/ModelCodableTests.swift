@@ -39,6 +39,29 @@ final class ModelCodableTests: XCTestCase {
     func testCentralIndexDefaults() {
         let index = CentralIndex()
         XCTAssertNil(index.publicSpacePath)
+        XCTAssertNil(index.codingSpaceRootPath)
         XCTAssertEqual(index.terminalPreference, .terminal)
+    }
+
+    /// 旧版 index.json 没有 codingSpaceRootPath key，应解码为 nil 而不是失败。
+    func testCentralIndexDecodesLegacyJSONWithoutCodingSpaceRoot() throws {
+        let data = Data("""
+        {"publicSpacePath":"/tmp/public","codingSpacePaths":["/tmp/ws1"],"terminalPreference":"warp"}
+        """.utf8)
+
+        let index = try JSONDecoder().decode(CentralIndex.self, from: data)
+
+        XCTAssertEqual(index.publicSpacePath, "/tmp/public")
+        XCTAssertEqual(index.codingSpacePaths, ["/tmp/ws1"])
+        XCTAssertEqual(index.terminalPreference, .warp)
+        XCTAssertNil(index.codingSpaceRootPath)
+    }
+
+    /// 终端枚举：新增 otty 后 rawValue 既有约定不变，旧值仍可解码。
+    func testTerminalAppCases() {
+        XCTAssertEqual(TerminalApp.allCases, [.terminal, .iterm2, .warp, .otty])
+        XCTAssertEqual(TerminalApp(rawValue: "otty"), .otty)
+        XCTAssertEqual(TerminalApp(rawValue: "warp"), .warp)
+        XCTAssertEqual(TerminalApp(rawValue: "terminal"), .terminal)
     }
 }

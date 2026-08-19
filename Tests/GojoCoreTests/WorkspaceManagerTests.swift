@@ -406,6 +406,78 @@ final class WorkspaceManagerTests: XCTestCase {
         XCTAssertTrue(try mgr.scanMembers(in: ws).isEmpty)
     }
 
+    // MARK: - 编码空间根目录
+
+    func testSetAndClearCodingSpaceRoot() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let root = sandbox.appendingPathComponent("spaces")
+
+        try mgr.setCodingSpaceRoot(root)
+        XCTAssertEqual(mgr.codingSpaceRootURL()?.path, root.path)
+
+        try mgr.clearCodingSpaceRoot()
+        XCTAssertNil(mgr.codingSpaceRootURL())
+    }
+
+    func testUniqueCodingSpaceFolderName() throws {
+        let dir = try TestSupport.makeTempDir()
+        XCTAssertEqual(WorkspaceManager.uniqueCodingSpaceFolderName(base: "ws", in: dir), "ws")
+
+        try FileManager.default.createDirectory(
+            at: dir.appendingPathComponent("ws"), withIntermediateDirectories: true)
+        XCTAssertEqual(WorkspaceManager.uniqueCodingSpaceFolderName(base: "ws", in: dir), "ws_2")
+
+        try FileManager.default.createDirectory(
+            at: dir.appendingPathComponent("ws_2"), withIntermediateDirectories: true)
+        XCTAssertEqual(WorkspaceManager.uniqueCodingSpaceFolderName(base: "ws", in: dir), "ws_3")
+
+        // 同名文件同样占名；usedNames 仅内存判重（磁盘无冲突时也生效）
+        try "f".write(to: dir.appendingPathComponent("app"), atomically: true, encoding: .utf8)
+        XCTAssertEqual(WorkspaceManager.uniqueCodingSpaceFolderName(base: "app", in: dir), "app_2")
+        XCTAssertEqual(WorkspaceManager.uniqueCodingSpaceFolderName(
+            base: "lib", in: dir, usedNames: ["lib"]), "lib_2")
+    }
+
+    func testCreateCodingSpaceUnderRootCreatesFolderAndRegisters() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let root = sandbox.appendingPathComponent("spaces")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+
+        let url = try mgr.createCodingSpace(named: "电商中台", underRoot: root)
+
+        XCTAssertEqual(url.path, root.appendingPathComponent("电商中台").path)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: url.appendingPathComponent(".gojo/workspace.json").path))
+        XCTAssertTrue(mgr.codingSpaceURLs().contains(url))
+    }
+
+    func testCreateCodingSpaceUnderRootDedupesExistingFolder() throws {
+        let (mgr, _, sandbox) = try makeWithPublicSpace()
+        let root = sandbox.appendingPathComponent("spaces")
+        let existing = root.appendingPathComponent("ws")
+        try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
+        try "哨兵".write(to: existing.appendingPathComponent("sentinel.txt"),
+                        atomically: true, encoding: .utf8)
+
+        let url = try mgr.createCodingSpace(named: "ws", underRoot: root)
+
+        // 已有同名目录不动，新建 ws_2，且清单名 = 实际文件夹名
+        XCTAssertEqual(url.lastPathComponent, "ws_2")
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: existing.appendingPathComponent("sentinel.txt").path))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: existing.appendingPathComponent(".gojo").path))
+    }
+
+    func testSanitizedFolderName() {
+        XCTAssertEqual(WorkspaceManager.sanitizedFolderName("  a/b  "), "a-b")
+        XCTAssertEqual(WorkspaceManager.sanitizedFolderName("a:b"), "a-b")
+        XCTAssertEqual(WorkspaceManager.sanitizedFolderName(".hidden"), "hidden")
+        XCTAssertEqual(WorkspaceManager.sanitizedFolderName("..."), "")
+        XCTAssertEqual(WorkspaceManager.sanitizedFolderName("   "), "")
+        XCTAssertEqual(WorkspaceManager.sanitizedFolderName("正常名称"), "正常名称")
+    }
+
     // MARK: - 编码空间删除
 
     func testUnregisterCodingSpaceKeepsFolderAndContents() throws {

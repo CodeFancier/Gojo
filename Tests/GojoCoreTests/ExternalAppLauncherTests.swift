@@ -17,6 +17,8 @@ final class ExternalAppLauncherTests: XCTestCase {
                        ["-b", "com.googlecode.iterm2", "/tmp/space"])
         XCTAssertEqual(l.launchSpec(for: .terminal(.warp), path: path).arguments,
                        ["-b", "dev.warp.Warp-Stable", "/tmp/space"])
+        XCTAssertEqual(l.launchSpec(for: .terminal(.otty), path: path).arguments,
+                       ["-b", "io.appmakes.otty", "/tmp/space"])
     }
 
     /// 首选 bundle id 未装（非零退出码）时应沿候选链回退到 Warp Preview。

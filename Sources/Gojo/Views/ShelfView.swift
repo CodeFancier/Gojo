@@ -7,7 +7,8 @@ struct ShelfView: View {
     @ScaledMetric(relativeTo: .headline) private var carouselTitleLineHeight: CGFloat = 24
     @ScaledMetric(relativeTo: .caption) private var authorLineHeight: CGFloat = 16
 
-    private let wordmarkClearance: CGFloat = 48
+    /// 根目录条整行的占用高度（顶部让位红绿灯/wordmark + 条体 + 下间距）。
+    private let rootBarClearance: CGFloat = 84
     private let authorBottomPadding: CGFloat = 12
     private let minimumFocusedCardHeight: CGFloat = 180
     private let paginationHeight: CGFloat = 26
@@ -17,7 +18,7 @@ struct ShelfView: View {
     }
 
     private var minimumAccessibleHeight: CGFloat {
-        wordmarkClearance
+        rootBarClearance
             + carouselTitleLineHeight
             + minimumFocusedCardHeight
             + paginationHeight
@@ -25,40 +26,45 @@ struct ShelfView: View {
     }
 
     var body: some View {
-        carousel
-            .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? minimumAccessibleHeight : nil)
-            .background(DomainBackground())
-            .overlay(alignment: .topLeading) {
-                BrandWordmark(height: 26)
-                    .padding(.leading, 84)
-                    .padding(.top, 14)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                AuthorCredit()
-                    .padding(.trailing, 16)
-                    .padding(.bottom, authorBottomPadding)
-            }
-            .overlay(alignment: .topTrailing) {
-                Button {
-                    state.startWorkspaceScan()
-                } label: {
-                    Label("扫描工作空间", systemImage: "rectangle.and.text.magnifyingglass")
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(Color.textSecondary)
-                        .padding(8)
-                        .background(Color.lightBlue.opacity(0.12), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .help("扫描本机 Claude Code / Codex 工作空间")
+        VStack(spacing: 0) {
+            CodingSpaceRootBar()
+                .padding(.horizontal, 16)
+                .padding(.top, 44)
+                .padding(.bottom, 8)
+            carousel
+        }
+        .frame(minHeight: dynamicTypeSize.isAccessibilitySize ? minimumAccessibleHeight : nil)
+        .background(DomainBackground())
+        .overlay(alignment: .topLeading) {
+            BrandWordmark(height: 26)
+                .padding(.leading, 84)
+                .padding(.top, 14)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            AuthorCredit()
                 .padding(.trailing, 16)
-                .padding(.top, 12)
+                .padding(.bottom, authorBottomPadding)
+        }
+        .overlay(alignment: .topTrailing) {
+            Button {
+                state.startWorkspaceScan()
+            } label: {
+                Label("扫描工作空间", systemImage: "rectangle.and.text.magnifyingglass")
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.textSecondary)
+                    .padding(8)
+                    .background(Color.lightBlue.opacity(0.12), in: Circle())
             }
+            .buttonStyle(.plain)
+            .help("扫描本机 Claude Code / Codex 工作空间")
+            .padding(.trailing, 16)
+            .padding(.top, 12)
+        }
     }
 
     private var carousel: some View {
         CodingSpaceCarousel()
-            .padding(.top, wordmarkClearance)
             .padding(.bottom, authorClearance)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
