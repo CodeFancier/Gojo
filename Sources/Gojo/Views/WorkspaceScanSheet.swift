@@ -3,8 +3,19 @@ import GojoCore
 
 struct WorkspaceScanSheet: View {
     @EnvironmentObject private var state: AppState
+    @State private var query = ""
 
     private var session: WorkspaceScanSession? { state.workspaceScanSession }
+
+    /// 列表按搜索词过滤（匹配文件夹名或路径，大小写不敏感）。
+    private var filteredResults(in session: WorkspaceScanSession) -> [WorkspaceScanResult] {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !needle.isEmpty else { return session.results }
+        return session.results.filter {
+            $0.project.name.localizedStandardContains(needle)
+                || $0.project.url.path.localizedStandardContains(needle)
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -21,8 +32,14 @@ struct WorkspaceScanSheet: View {
 
                 if session.results.isEmpty {
                     emptyState(for: session)
+                } else if filteredResults(in: session).isEmpty {
+                    Text("没有匹配的文件夹")
+                        .font(.caption)
+                        .foregroundStyle(Color.textTertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 48)
                 } else {
-                    List(session.results) { result in
+                    List(filteredResults(in: session)) { result in
                         WorkspaceScanResultRow(
                             result: result,
                             phase: session.phase,
@@ -44,7 +61,11 @@ struct WorkspaceScanSheet: View {
     private func title(for session: WorkspaceScanSession) -> String {
         switch session.phase {
         case .scanning: "正在搜索已存在项目"
-        case .review: "发现 \(session.discoveredCount) 个文件夹"
+        case .review:
+            let matched = filteredResults(in: session).count
+            return matched == session.discoveredCount
+                ? "发现 \(session.discoveredCount) 个文件夹"
+                : "匹配 \(matched) / \(session.discoveredCount) 个文件夹"
         case .importing: "正在登记 \(session.selectedForImport.count) 个编码空间"
         case .finished: session.hasFailures ? "部分项目未导入" : "导入完成"
         }
@@ -67,13 +88,22 @@ struct WorkspaceScanSheet: View {
 
     @ViewBuilder
     private func reviewControls(for session: WorkspaceScanSession) -> some View {
-        let selectedCount = session.selectedForImport.count
-        let allSelected = !session.results.isEmpty && selectedCount >= session.results.count
+        let visible = filteredResults(in: session)
+        let allVisibleSelected = !visible.isEmpty
+            && visible.allSatisfy(\.isSelected)
         HStack(spacing: 12) {
-            Button(allSelected ? "取消全选" : "全选") {
-                state.selectAllScanResults(!allSelected)
+            Button(allVisibleSelected ? "取消全选" : "全选") {
+                state.selectAllScanResults(
+                    !allVisibleSelected, visibleIDs: Set(visible.map(\.id)))
             }
             Spacer()
+            TextField("搜索文件夹", text: $query)
+                .textFieldStyle(.plain)
+                .font(.body)
+                .padding(.horizontal, 10)
+                .frame(minHeight: 30)
+                .frame(maxWidth: 220)
+                .background(Color.chrome, in: RoundedRectangle(cornerRadius: 8))
         }
     }
 

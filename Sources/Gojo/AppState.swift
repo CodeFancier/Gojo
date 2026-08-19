@@ -384,9 +384,11 @@ final class AppState: ObservableObject {
         workspaceScanSession?.results[i].isSelected.toggle()
     }
 
-    func selectAllScanResults(_ select: Bool) {
+    /// 全选/取消全选。传 visibleIDs 时只作用于当前搜索可见项（隐藏项勾选态保持不变）。
+    func selectAllScanResults(_ select: Bool, visibleIDs: Set<String>? = nil) {
         guard var session = workspaceScanSession else { return }
         for i in session.results.indices {
+            if let visibleIDs, !visibleIDs.contains(session.results[i].id) { continue }
             session.results[i].isSelected = select
         }
         workspaceScanSession = session
