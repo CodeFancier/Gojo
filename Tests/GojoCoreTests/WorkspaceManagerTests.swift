@@ -448,7 +448,9 @@ final class WorkspaceManagerTests: XCTestCase {
         XCTAssertEqual(url.path, root.appendingPathComponent("电商中台").path)
         XCTAssertTrue(FileManager.default.fileExists(
             atPath: url.appendingPathComponent(".gojo/workspace.json").path))
-        XCTAssertTrue(mgr.codingSpaceURLs().contains(url))
+        // 用 path 比较：macOS Foundation 的 URL == 对不同构造来源的 file URL 判不等
+        XCTAssertTrue(mgr.codingSpaceURLs().map(\.path).contains(url.path),
+                      "codingSpaceURLs: \(mgr.codingSpaceURLs().map(\.path))")
     }
 
     func testCreateCodingSpaceUnderRootDedupesExistingFolder() throws {
@@ -521,7 +523,7 @@ final class WorkspaceManagerTests: XCTestCase {
         try mgr.removeCodingSpace(at: ws, mode: .unregisterOnly)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: ws.appendingPathComponent("keep.txt").path))
-        XCTAssertFalse(mgr.codingSpaceURLs().contains(ws))
+        XCTAssertFalse(mgr.codingSpaceURLs().map(\.path).contains(ws.path))
     }
 
     func testRemoveCodingSpaceContentsKeepsEmptyRootFolder() throws {
@@ -535,7 +537,7 @@ final class WorkspaceManagerTests: XCTestCase {
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: ws.path))
         XCTAssertTrue(try FileManager.default.contentsOfDirectory(atPath: ws.path).isEmpty)
-        XCTAssertFalse(mgr.codingSpaceURLs().contains(ws))
+        XCTAssertFalse(mgr.codingSpaceURLs().map(\.path).contains(ws.path))
     }
 
     func testRemoveCodingSpaceDirectoryDeletesRootFolder() throws {
@@ -546,7 +548,7 @@ final class WorkspaceManagerTests: XCTestCase {
         try mgr.removeCodingSpace(at: ws, mode: .directory)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: ws.path))
-        XCTAssertFalse(mgr.codingSpaceURLs().contains(ws))
+        XCTAssertFalse(mgr.codingSpaceURLs().map(\.path).contains(ws.path))
     }
 
     func testRemoveCodingSpaceDirectorySucceedsWhenFolderIsAlreadyMissing() throws {
@@ -556,7 +558,7 @@ final class WorkspaceManagerTests: XCTestCase {
         try FileManager.default.removeItem(at: ws)
 
         XCTAssertNoThrow(try mgr.removeCodingSpace(at: ws, mode: .directory))
-        XCTAssertFalse(mgr.codingSpaceURLs().contains(ws))
+        XCTAssertFalse(mgr.codingSpaceURLs().map(\.path).contains(ws.path))
     }
 
     func testRemovalItemsAreEmptyWhenCodingSpaceFolderIsAlreadyMissing() throws {
@@ -638,7 +640,7 @@ final class WorkspaceManagerTests: XCTestCase {
 
         try mgr.removeCodingSpace(at: ws, mode: .directory)
         XCTAssertFalse(FileManager.default.fileExists(atPath: ws.path))
-        XCTAssertFalse(mgr.codingSpaceURLs().contains(ws))
+        XCTAssertFalse(mgr.codingSpaceURLs().map(\.path).contains(ws.path))
     }
 
     // MARK: - 外部项目软链接导入

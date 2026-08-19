@@ -1,8 +1,13 @@
 import SwiftUI
 
 @main
+@MainActor
 struct GojoApp: App {
     @StateObject private var state = AppState()
+
+    init() {}
+
+
     var body: some Scene {
         WindowGroup("Gojo") {
             ContentView().environmentObject(state)
