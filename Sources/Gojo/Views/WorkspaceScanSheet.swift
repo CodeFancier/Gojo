@@ -8,7 +8,7 @@ struct WorkspaceScanSheet: View {
     private var session: WorkspaceScanSession? { state.workspaceScanSession }
 
     /// 列表按搜索词过滤（匹配文件夹名或路径，大小写不敏感）。
-    private var filteredResults(in session: WorkspaceScanSession) -> [WorkspaceScanResult] {
+    private func filteredResults(in session: WorkspaceScanSession) -> [WorkspaceScanResult] {
         let needle = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !needle.isEmpty else { return session.results }
         return session.results.filter {
@@ -60,14 +60,17 @@ struct WorkspaceScanSheet: View {
 
     private func title(for session: WorkspaceScanSession) -> String {
         switch session.phase {
-        case .scanning: "正在搜索已存在项目"
+        case .scanning:
+            return "正在搜索已存在项目"
         case .review:
             let matched = filteredResults(in: session).count
             return matched == session.discoveredCount
                 ? "发现 \(session.discoveredCount) 个文件夹"
                 : "匹配 \(matched) / \(session.discoveredCount) 个文件夹"
-        case .importing: "正在登记 \(session.selectedForImport.count) 个编码空间"
-        case .finished: session.hasFailures ? "部分项目未导入" : "导入完成"
+        case .importing:
+            return "正在登记 \(session.selectedForImport.count) 个编码空间"
+        case .finished:
+            return session.hasFailures ? "部分项目未导入" : "导入完成"
         }
     }
 
