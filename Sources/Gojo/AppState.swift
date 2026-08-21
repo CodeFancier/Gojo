@@ -200,7 +200,8 @@ final class AppState: ObservableObject {
     /// 确认重命名：改目录 + 更新登记；迁移全部成功直接关窗，有失败项留在
     /// 窗内供重试。当前在该空间内时路由跟随新路径。
     func confirmCodingSpaceRename() {
-        guard let session, !session.migrating, session.outcome == nil else { return }
+        guard let session = codingSpaceRenameSession,
+              !session.migrating, session.outcome == nil else { return }
         let name = WorkspaceManager.sanitizedFolderName(session.name)
         guard !name.isEmpty, name != session.currentName else { return }
         let migrate = session.migrateMemory
@@ -238,7 +239,8 @@ final class AppState: ObservableObject {
 
     /// 转载失败后的幂等重试（重命名已完成）。
     func retryCodingSpaceMemoryMigration() {
-        guard let session, let outcome = session.outcome, !session.migrating else { return }
+        guard let session = codingSpaceRenameSession,
+              let outcome = session.outcome, !session.migrating else { return }
         let sessionID = session.id
         codingSpaceRenameSession?.migrating = true
         let manager = self.manager

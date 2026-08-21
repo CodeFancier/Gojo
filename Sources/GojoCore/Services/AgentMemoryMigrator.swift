@@ -17,7 +17,9 @@ public protocol AgentMemoryMigrator: Sendable {
 /// 迁移 = 把旧编码目录搬到新编码目录名下；目标已存在时逐文件合并，
 /// `memory/*.md` 冲突绝不覆盖——旧的改名 `.migrated.md` 保双份
 /// （Gojo 不理解记忆内容语义，只做无损搬运）。
-public struct ClaudeMemoryMigrator: AgentMemoryMigrator {
+/// - Note: `@unchecked`：FileManager 单例本身线程安全但未标 Sendable，
+///   与 `AgentMemoryReader` 同一处理。
+public struct ClaudeMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
     public let kind: AgentKind = .claude
     private let home: URL
     private let fm = FileManager.default
@@ -123,7 +125,7 @@ public struct ClaudeMemoryMigrator: AgentMemoryMigrator {
 /// Codex 的会话在 `~/.codex/sessions/**/*.jsonl`，cwd 写死在每行的
 /// `payload.cwd`（session_meta / turn_context 等）。迁移 = 逐行 JSON 解析并
 /// 替换旧 cwd 为新 cwd；未修改行保留原始字节，有替换才原子写回（幂等）。
-public struct CodexMemoryMigrator: AgentMemoryMigrator {
+public struct CodexMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
     public let kind: AgentKind = .codex
     private let home: URL
     private let fm = FileManager.default
