@@ -92,34 +92,22 @@ public final class WorkspaceManager {
         try store.savePublicSpace(manifest, at: space)
     }
 
-    /// 合并清单与扫描：刷新 cloned 标志，补录扫描到但清单缺失的库；持久化后返回。
+    /// 刷新清单各项的 cloned 标志并持久化。不做扫描补录——顶层 Git 目录须显式
+    /// 「转为公共仓库」（promotePublicProject）才入清单；磁盘=事实，登记=语义。
     public func publicProjects() throws -> [PublicProject] {
         let space = try publicSpaceURL()
         var m = (try store.loadPublicSpace(at: space)) ?? PublicSpaceManifest()
-
-        // 1) 刷新已有项的 cloned 状态
         for i in m.projects.indices {
             let path = space.appendingPathComponent(m.projects[i].localRelativePath).path
             m.projects[i].cloned = fm.fileExists(atPath: path)
-        }
-        // 2) 扫描补录：子目录含 .git 且清单无同名者
-        let entries = (try? fm.contentsOfDirectory(at: space,
-            includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])) ?? []
-        for entry in entries {
-            let name = entry.lastPathComponent
-            guard name != ".gojo" else { continue }
-            guard fm.fileExists(atPath: entry.appendingPathComponent(".git").path) else { continue }
-            guard !m.projects.contains(where: { $0.name == name }) else { continue }
-            let origin = (try? git.remoteURL(at: entry)) ?? ""
-            m.projects.append(PublicProject(name: name, url: origin, cloned: true))
         }
         try store.savePublicSpace(m, at: space)
         return m.projects.sorted { $0.name < $1.name }
     }
 
-    /// 扫描公共空间中所有可展开目录，以及其中直接包含的 Git 子项目。
-    /// 已登记且已落盘的公共项目即使没有子项目，也会作为可展开目录返回。
-    public func publicCompositeFolders() throws -> [PublicCompositeFolder] {
+    /// 列出公共空间的全部条目：根下所有直接子目录 ∪ 清单全部登记项（含未落盘）。
+    /// 每个条目都可展开扫描直接子级 Git 仓库；登记项本身（含嵌套路径）也有独立条目。
+    public func publicSpaceEntries() throws -> [PublicSpaceEntry] {
         let space = try publicSpaceURL()
         let manifest = (try store.loadPublicSpace(at: space)) ?? PublicSpaceManifest()
         var registeredByPath: [String: UUID] = [:]
@@ -127,19 +115,29 @@ public final class WorkspaceManager {
             registeredByPath[project.localRelativePath] = project.id
         }
 
-        var candidates: [String: URL] = [:]
+        // 候选 = 根下全部直接子目录（排除 .gojo）∪ 清单登记项；nil 表示登记但未落盘。
+        var candidates: [String: URL?] = [:]
         for folder in directoryEntries(at: space) where folder.lastPathComponent != ".gojo" {
             candidates[folder.lastPathComponent] = folder
         }
-        for project in manifest.projects {
-            let path = project.localRelativePath
-            let folder = space.appendingPathComponent(path)
-            if fm.fileExists(atPath: folder.path) {
-                candidates[path] = folder
-            }
+        for project in manifest.projects where candidates[project.localRelativePath] == nil {
+            let folder = space.appendingPathComponent(project.localRelativePath)
+            candidates[project.localRelativePath] =
+                fm.fileExists(atPath: folder.path) ? folder : nil
         }
 
-        return candidates.compactMap { relativePath, folder in
+        return candidates.map { relativePath, folder -> PublicSpaceEntry in
+            guard let folder else {
+                // 未落盘的登记项：保留 Clone / 删除入口。登记嵌套路径的目录被手动
+                // 删除后也落到这里，Clone 会落回原嵌套路径（git clone 自建父目录）。
+                let name = manifest.projects
+                    .first { $0.localRelativePath == relativePath }?.name ?? relativePath
+                return PublicSpaceEntry(
+                    name: name, relativePath: relativePath, isOnDisk: false,
+                    publicProjectID: registeredByPath[relativePath]
+                )
+            }
+            let isGit = fm.fileExists(atPath: folder.appendingPathComponent(".git").path)
             let projects = directoryEntries(at: folder).compactMap { child -> NestedPublicProject? in
                 guard fm.fileExists(atPath: child.appendingPathComponent(".git").path) else {
                     return nil
@@ -153,25 +151,23 @@ public final class WorkspaceManager {
                     publicProjectID: registeredByPath[childRelativePath]
                 )
             }
-            let publicProjectID = registeredByPath[relativePath]
-            guard publicProjectID != nil || !projects.isEmpty else { return nil }
-            return PublicCompositeFolder(
+            return PublicSpaceEntry(
                 name: folder.lastPathComponent,
                 relativePath: relativePath,
-                publicProjectID: publicProjectID,
+                isOnDisk: true,
+                isGitRepository: isGit,
+                remoteURL: isGit ? ((try? git.remoteURL(at: folder)) ?? "") : "",
+                publicProjectID: registeredByPath[relativePath],
                 projects: projects
             )
         }
         .sorted { $0.relativePath.localizedStandardCompare($1.relativePath) == .orderedAscending }
     }
 
-    /// 将嵌套仓库登记为公共项目。仓库保留原位，通过 relativePath 参与后续软链接和状态扫描。
-    public func promoteNestedPublicProject(parentRelativePath: String,
-                                           projectName: String) throws {
-        let relativePath = "\(parentRelativePath)/\(projectName)"
-        guard let nested = try publicCompositeFolders()
-            .first(where: { $0.relativePath == parentRelativePath })?
-            .projects.first(where: { $0.name == projectName }) else {
+    /// 将公共空间内的某个 Git 仓库原位登记为公共项目。适用顶层目录自身或任一条目的
+    /// 直接子级；仓库保留原位，通过 relativePath 参与后续软链接和状态扫描。
+    public func promotePublicProject(relativePath: String) throws {
+        guard let url = try promotableRepoURL(relativePath: relativePath) else {
             throw WorkspaceError.nestedPublicProjectNotFound(relativePath)
         }
 
@@ -180,12 +176,32 @@ public final class WorkspaceManager {
         if manifest.projects.contains(where: { $0.localRelativePath == relativePath }) {
             return
         }
-        guard !manifest.projects.contains(where: { $0.name == projectName }) else {
-            throw WorkspaceError.publicProjectNameCollision(projectName)
+        let name = URL(fileURLWithPath: relativePath).lastPathComponent
+        guard !manifest.projects.contains(where: { $0.name == name }) else {
+            throw WorkspaceError.publicProjectNameCollision(name)
         }
-        manifest.projects.append(PublicProject(name: projectName, url: nested.url, cloned: true,
+        manifest.projects.append(PublicProject(name: name, url: url, cloned: true,
                                                relativePath: relativePath))
         try store.savePublicSpace(manifest, at: space)
+    }
+
+    /// 在条目树中解析 relativePath 对应的仓库远程地址；找不到或非 Git 仓库返回 nil。
+    private func promotableRepoURL(relativePath: String) throws -> String? {
+        for entry in try publicSpaceEntries() {
+            if entry.relativePath == relativePath {
+                return entry.isGitRepository ? entry.remoteURL : nil
+            }
+            if let child = entry.projects.first(where: { $0.id == relativePath }) {
+                return child.url
+            }
+        }
+        return nil
+    }
+
+    /// 将嵌套仓库登记为公共项目。仓库保留原位，通过 relativePath 参与后续软链接和状态扫描。
+    public func promoteNestedPublicProject(parentRelativePath: String,
+                                           projectName: String) throws {
+        try promotePublicProject(relativePath: "\(parentRelativePath)/\(projectName)")
     }
 
     public func promoteNestedPublicProject(parentFolderName: String,

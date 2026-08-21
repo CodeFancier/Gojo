@@ -57,60 +57,78 @@ final class WorkspaceManagerTests: XCTestCase {
         XCTAssertNotNil(try mgr.publicProjects().first(where: { $0.id == id }))
     }
 
-    func testPublicProjectsAutoDetectsScannedRepo() throws {
+    func testScannedRepoIsNotAutoRegisteredButListedAsGitEntry() throws {
         let (mgr, publicSpace, sandbox) = try makeWithPublicSpace()
-        // 直接在公共空间放一个已 clone 的库（不经 addPublicProject）
+        // 直接在公共空间放一个已 clone 的库（不经 addPublicProject / promote）
         let source = try TestSupport.makeLocalGitRepo(named: "src", in: sandbox)
         try GitService().clone(url: source.path, into: publicSpace.appendingPathComponent("manual"))
 
-        let projects = try mgr.publicProjects()
-        XCTAssertTrue(projects.contains { $0.name == "manual" && $0.cloned })
+        // 不自动登记：磁盘=事实，登记=语义，须显式「转为公共仓库」
+        XCTAssertFalse(try mgr.publicProjects().contains { $0.name == "manual" })
+
+        let entry = try XCTUnwrap(
+            try mgr.publicSpaceEntries().first(where: { $0.relativePath == "manual" })
+        )
+        XCTAssertTrue(entry.isOnDisk)
+        XCTAssertTrue(entry.isGitRepository)
+        XCTAssertEqual(entry.remoteURL, source.path)
+        XCTAssertNil(entry.publicProjectID)
     }
 
-    func testCompositePublicFolderDiscoversNestedRepositories() throws {
+    func testPublicSpaceEntriesListAllDirectoriesAndDiscoverNestedRepositories() throws {
         let (mgr, publicSpace, _) = try makeWithPublicSpace()
         let suite = publicSpace.appendingPathComponent("commerce")
         try FileManager.default.createDirectory(at: suite, withIntermediateDirectories: true)
         try TestSupport.makeLocalGitRepo(named: "orders", in: suite)
         try FileManager.default.createDirectory(
             at: suite.appendingPathComponent("notes"), withIntermediateDirectories: true)
+        // 不含任何 git 子仓库的普通目录也在列表中
+        try FileManager.default.createDirectory(
+            at: publicSpace.appendingPathComponent("docs"), withIntermediateDirectories: true)
 
-        let folders = try mgr.publicCompositeFolders()
+        let entries = try mgr.publicSpaceEntries()
 
-        XCTAssertEqual(folders.map(\.name), ["commerce"])
-        XCTAssertEqual(folders[0].projects.map(\.name), ["orders"])
-        XCTAssertNil(folders[0].projects[0].publicProjectID)
+        XCTAssertEqual(entries.map(\.relativePath), ["commerce", "docs"])
+        XCTAssertEqual(entries[0].projects.map(\.name), ["orders"])
+        XCTAssertNil(entries[0].projects[0].publicProjectID)
+        XCTAssertFalse(entries[0].isGitRepository)    // commerce 本身非 git 仓库
+        XCTAssertTrue(entries[1].isOnDisk)
+        XCTAssertFalse(entries[1].isGitRepository)
+        XCTAssertTrue(entries[1].projects.isEmpty)
     }
 
     func testEveryClonedPublicProjectIsExpandableAndDiscoversChildren() throws {
         let (mgr, publicSpace, _) = try makeWithPublicSpace()
         let parent = try TestSupport.makeLocalGitRepo(named: "platform", in: publicSpace)
         try TestSupport.makeLocalGitRepo(named: "payments", in: parent)
+        try mgr.promotePublicProject(relativePath: "platform")
         let publicProject = try XCTUnwrap(
             mgr.publicProjects().first(where: { $0.name == "platform" })
         )
 
-        let folder = try XCTUnwrap(
-            mgr.publicCompositeFolders().first(where: { $0.publicProjectID == publicProject.id })
+        let entry = try XCTUnwrap(
+            try mgr.publicSpaceEntries().first(where: { $0.publicProjectID == publicProject.id })
         )
 
-        XCTAssertEqual(folder.relativePath, "platform")
-        XCTAssertEqual(folder.projects.map(\.name), ["payments"])
-        XCTAssertEqual(folder.projects[0].parentRelativePath, "platform")
+        XCTAssertEqual(entry.relativePath, "platform")
+        XCTAssertTrue(entry.isGitRepository)
+        XCTAssertEqual(entry.projects.map(\.name), ["payments"])
+        XCTAssertEqual(entry.projects[0].parentRelativePath, "platform")
     }
 
     func testClonedPublicProjectWithoutChildrenIsStillExpandable() throws {
         let (mgr, publicSpace, _) = try makeWithPublicSpace()
         try TestSupport.makeLocalGitRepo(named: "platform", in: publicSpace)
+        try mgr.promotePublicProject(relativePath: "platform")
         let publicProject = try XCTUnwrap(
             mgr.publicProjects().first(where: { $0.name == "platform" })
         )
 
-        let folder = try XCTUnwrap(
-            mgr.publicCompositeFolders().first(where: { $0.publicProjectID == publicProject.id })
+        let entry = try XCTUnwrap(
+            try mgr.publicSpaceEntries().first(where: { $0.publicProjectID == publicProject.id })
         )
 
-        XCTAssertTrue(folder.projects.isEmpty)
+        XCTAssertTrue(entry.projects.isEmpty)
     }
 
     func testPromoteNestedRepositoryKeepsFilesInPlaceAndRegistersPublicProject() throws {
@@ -125,7 +143,68 @@ final class WorkspaceManagerTests: XCTestCase {
         let project = try XCTUnwrap(mgr.publicProjects().first { $0.name == "orders" })
         XCTAssertTrue(project.cloned)
         XCTAssertEqual(project.relativePath, "commerce/orders")
-        XCTAssertEqual(try mgr.publicCompositeFolders()[0].projects[0].publicProjectID, project.id)
+        XCTAssertEqual(try mgr.publicSpaceEntries()
+            .first(where: { $0.relativePath == "commerce" })?
+            .projects[0].publicProjectID, project.id)
+    }
+
+    func testPromotePublicProjectRegistersTopLevelRepositoryInPlace() throws {
+        let (mgr, publicSpace, _) = try makeWithPublicSpace()
+        let repo = try TestSupport.makeLocalGitRepo(named: "solo", in: publicSpace)
+
+        try mgr.promotePublicProject(relativePath: "solo")
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: repo.path))   // 原位不动
+        let project = try XCTUnwrap(mgr.publicProjects().first { $0.name == "solo" })
+        XCTAssertTrue(project.cloned)
+        XCTAssertEqual(project.relativePath, "solo")
+        XCTAssertEqual(project.url, "")    // 无 origin 时降级为空串
+        let entry = try XCTUnwrap(
+            try mgr.publicSpaceEntries().first(where: { $0.relativePath == "solo" })
+        )
+        XCTAssertEqual(entry.publicProjectID, project.id)
+        XCTAssertTrue(entry.isGitRepository)
+    }
+
+    func testPublicSpaceEntriesIncludeRegisteredButNotClonedProject() throws {
+        let (mgr, _, _) = try makeWithPublicSpace()
+        try mgr.addPublicProject(name: "lib", url: "git@x:lib.git")
+
+        let entry = try XCTUnwrap(
+            try mgr.publicSpaceEntries().first(where: { $0.relativePath == "lib" })
+        )
+
+        XCTAssertFalse(entry.isOnDisk)
+        XCTAssertFalse(entry.isGitRepository)
+        XCTAssertNotNil(entry.publicProjectID)
+        XCTAssertTrue(entry.projects.isEmpty)
+    }
+
+    func testPromotePublicProjectRejectsPlainDirectory() throws {
+        let (mgr, publicSpace, _) = try makeWithPublicSpace()
+        try FileManager.default.createDirectory(
+            at: publicSpace.appendingPathComponent("docs"), withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try mgr.promotePublicProject(relativePath: "docs")) {
+            XCTAssertEqual($0 as? WorkspaceError, .nestedPublicProjectNotFound("docs"))
+        }
+        XCTAssertTrue(try mgr.publicProjects().isEmpty)
+    }
+
+    func testPromotePublicProjectRejectsNameCollision() throws {
+        let (mgr, publicSpace, _) = try makeWithPublicSpace()
+        // 已登记名为 lib 的项目（路径 lib，未克隆）；另一个同名仓库嵌在 commerce 下，
+        // 路径不同但名称相同——登记名全局唯一，须拒绝。
+        try mgr.addPublicProject(name: "lib", url: "git@x:other-lib.git")
+        let suite = publicSpace.appendingPathComponent("commerce")
+        try FileManager.default.createDirectory(at: suite, withIntermediateDirectories: true)
+        try TestSupport.makeLocalGitRepo(named: "lib", in: suite)
+
+        XCTAssertThrowsError(
+            try mgr.promoteNestedPublicProject(parentRelativePath: "commerce", projectName: "lib")
+        ) {
+            XCTAssertEqual($0 as? WorkspaceError, .publicProjectNameCollision("lib"))
+        }
     }
 
     func testPromotedNestedRepositoryCanBeLinkedIntoCodingSpace() throws {
@@ -159,7 +238,7 @@ final class WorkspaceManagerTests: XCTestCase {
             mgr.publicProjects().first(where: { $0.name == "orders" })
         )
         let ordersFolder = try XCTUnwrap(
-            mgr.publicCompositeFolders().first(where: { $0.publicProjectID == ordersProject.id })
+            mgr.publicSpaceEntries().first(where: { $0.publicProjectID == ordersProject.id })
         )
         XCTAssertEqual(ordersFolder.projects.map(\.name), ["payments"])
 

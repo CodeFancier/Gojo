@@ -5,7 +5,7 @@ import Foundation
 @MainActor
 final class AppState: ObservableObject {
     @Published var publicProjects: [PublicProject] = []
-    @Published var compositePublicFolders: [PublicCompositeFolder] = []
+    @Published var publicSpaceEntries: [PublicSpaceEntry] = []
     @Published var codingSpaces: [URL] = []
     @Published var membersByPath: [String: [ScannedMember]] = [:]
     @Published var pendingMembersByPath: [String: [PendingCodingSpaceMember]] = [:]
@@ -34,7 +34,7 @@ final class AppState: ObservableObject {
         let index = store.loadIndex()
         codingSpaces = index.codingSpacePaths.map { URL(fileURLWithPath: $0) }
         publicProjects = (try? manager.publicProjects()) ?? []
-        compositePublicFolders = (try? manager.publicCompositeFolders()) ?? []
+        publicSpaceEntries = (try? manager.publicSpaceEntries()) ?? []
         var m: [String: [ScannedMember]] = [:]
         for space in codingSpaces {
             m[space.path] = (try? manager.scanMembers(in: space)) ?? []
@@ -130,10 +130,10 @@ final class AppState: ObservableObject {
         }
     }
     func promoteNestedPublicProject(_ project: NestedPublicProject) {
-        run {
-            try manager.promoteNestedPublicProject(
-                parentRelativePath: project.parentRelativePath, projectName: project.name)
-        }
+        promotePublicProject(relativePath: project.id)
+    }
+    func promotePublicProject(relativePath: String) {
+        run { try manager.promotePublicProject(relativePath: relativePath) }
     }
 
     // MARK: 编码空间

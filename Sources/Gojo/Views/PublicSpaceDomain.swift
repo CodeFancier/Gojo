@@ -47,35 +47,24 @@ struct PublicSpaceDomain: View {
     // MARK: 项目列表
 
     private var projectList: some View {
-        let standaloneCompositeFolders = state.compositePublicFolders.filter { !$0.isPublicProject }
-        return ScrollView {
+        ScrollView {
             LazyVStack(alignment: .leading, spacing: 10) {
-                if !standaloneCompositeFolders.isEmpty {
-                    Text("复合文件夹")
-                        .font(.headline)
-                        .foregroundStyle(Color.textSecondary)
-                    ForEach(standaloneCompositeFolders) { folder in
-                        CompositePublicFolderRow(folder: folder) { project in
-                            state.promoteNestedPublicProject(project)
-                        }
-                    }
+                if state.publicSpaceEntries.isEmpty {
+                    Text("公共空间还是空的，点右下角 + 添加，或直接拖入仓库文件夹")
+                        .font(.callout)
+                        .foregroundStyle(Color.textTertiary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 32)
                 }
-
-                if !state.publicProjects.isEmpty {
-                    Text("公共仓库")
-                        .font(.headline)
-                        .foregroundStyle(Color.textSecondary)
-                        .padding(.top, standaloneCompositeFolders.isEmpty ? 0 : 8)
-                    ForEach(state.publicProjects) { proj in
-                        ExpandablePublicProjectRow(
-                            project: proj,
-                            childProjects: childProjects(of: proj),
-                            isBusy: isBusy(proj),
-                            onClone: { state.clonePublicProject(proj.id) },
-                            onDelete: { state.removePublicProject(proj.id) },
-                            onPromote: { state.promoteNestedPublicProject($0) }
-                        )
-                    }
+                ForEach(state.publicSpaceEntries) { entry in
+                    PublicSpaceEntryRow(
+                        entry: entry,
+                        project: state.publicProjects.first { $0.id == entry.publicProjectID },
+                        isBusy: isBusy(entry),
+                        onClone: { state.clonePublicProject($0) },
+                        onDelete: { state.removePublicProject($0) },
+                        onPromote: { state.promotePublicProject(relativePath: $0) }
+                    )
                 }
             }
             .padding(16)
@@ -90,15 +79,10 @@ struct PublicSpaceDomain: View {
         }
     }
 
-    private func childProjects(of project: PublicProject) -> [NestedPublicProject] {
-        state.compositePublicFolders
-            .first(where: { $0.publicProjectID == project.id })?
-            .projects ?? []
-    }
-
-    private func isBusy(_ project: PublicProject) -> Bool {
-        state.publicSpaceFolder.map {
-            state.isBusy(space: $0, folder: project.name)
-        } ?? false
+    private func isBusy(_ entry: PublicSpaceEntry) -> Bool {
+        guard let space = state.publicSpaceFolder,
+              let project = state.publicProjects.first(where: { $0.id == entry.publicProjectID })
+        else { return false }
+        return state.isBusy(space: space, folder: project.name)
     }
 }
