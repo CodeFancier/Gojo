@@ -1,5 +1,20 @@
 import Foundation
 
+/// 记忆转载进度。单位 = 一个 Claude 项目目录或一个 Codex 会话文件。
+public struct AgentMigrationProgress: Sendable, Equatable {
+    public let completed: Int
+    public let total: Int
+
+    public init(completed: Int, total: Int) {
+        self.completed = completed; self.total = total
+    }
+
+    /// 0…1；total 为 0 时返回 1（无单位即视为完成）。
+    public var fraction: Double {
+        total > 0 ? Double(completed) / Double(total) : 1
+    }
+}
+
 /// 记忆转载器：把 agent 挂在旧 cwd 下的记忆/会话迁到新 cwd。
 /// 每个 agent 一个实现，适配其存储模式——Claude 按编码路径建目录（搬运目录），
 /// Codex 把 cwd 写死在会话 jsonl 里（重写内容）。
@@ -7,8 +22,19 @@ public protocol AgentMemoryMigrator: Sendable {
     var kind: AgentKind { get }
     /// dry-run 计数，供重命名前 UI 提示。
     func plan(_ moves: [(old: URL, new: URL)]) -> AgentMigrationPlan
+    /// 进度单位数（进度条分母）：Claude = 待迁移目录数，Codex = 命中会话文件数。
+    func unitCount(_ moves: [(old: URL, new: URL)]) -> Int
     /// 幂等执行：旧内容不存在或已迁过 = 跳过；失败逐项报告，不中断其余项。
-    func migrate(_ moves: [(old: URL, new: URL)]) -> [AgentMigrationItemResult]
+    /// 每处理完一个单位回调一次（含失败，进度不卡死）。
+    func migrate(_ moves: [(old: URL, new: URL)],
+                 onUnitComplete: (@Sendable () -> Void)?) -> [AgentMigrationItemResult]
+}
+
+public extension AgentMemoryMigrator {
+    /// 无进度回调的便捷重载。
+    func migrate(_ moves: [(old: URL, new: URL)]) -> [AgentMigrationItemResult] {
+        migrate(moves, onUnitComplete: nil)
+    }
 }
 
 // MARK: - Claude（目录搬运）
@@ -49,7 +75,15 @@ public struct ClaudeMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
         return AgentMigrationPlan(memoryDocs: docs, sessions: sessions)
     }
 
-    public func migrate(_ moves: [(old: URL, new: URL)]) -> [AgentMigrationItemResult] {
+    public func unitCount(_ moves: [(old: URL, new: URL)]) -> Int {
+        moves.reduce(0) { count, move in
+            move.old.path == move.new.path ? count
+                : count + (fm.fileExists(atPath: projectDir(for: move.old.path).path) ? 1 : 0)
+        }
+    }
+
+    public func migrate(_ moves: [(old: URL, new: URL)],
+                        onUnitComplete: (@Sendable () -> Void)?) -> [AgentMigrationItemResult] {
         var results: [AgentMigrationItemResult] = []
         for (old, new) in moves where old.path != new.path {
             let oldDir = projectDir(for: old.path)
@@ -65,6 +99,7 @@ public struct ClaudeMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
                 results.append(AgentMigrationItemResult(
                     kind: .claude, description: oldDir.lastPathComponent, error: "\(error)"))
             }
+            onUnitComplete?()
         }
         return results
     }
@@ -150,7 +185,12 @@ public struct CodexMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
         return AgentMigrationPlan(sessions: sessions)
     }
 
-    public func migrate(_ moves: [(old: URL, new: URL)]) -> [AgentMigrationItemResult] {
+    public func unitCount(_ moves: [(old: URL, new: URL)]) -> Int {
+        plan(moves).sessions
+    }
+
+    public func migrate(_ moves: [(old: URL, new: URL)],
+                        onUnitComplete: (@Sendable () -> Void)?) -> [AgentMigrationItemResult] {
         let map = Self.pathMap(moves)
         guard !map.isEmpty else { return [] }
         var results: [AgentMigrationItemResult] = []
@@ -162,6 +202,7 @@ public struct CodexMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
                 results.append(AgentMigrationItemResult(
                     kind: .codex, description: file.lastPathComponent, error: "\(error)"))
             }
+            onUnitComplete?()
         }
         return results
     }
@@ -273,8 +314,34 @@ public struct AgentMemoryMigrationService: @unchecked Sendable {
         return out
     }
 
-    public func migrate(_ moves: [(old: URL, new: URL)]) -> [AgentMigrationItemResult] {
-        migrators.flatMap { $0.migrate(moves) }
+    /// 聚合执行：分母 = 各 agent 单位数之和，每完成一个单位回调一次递增后的进度。
+    public func migrate(_ moves: [(old: URL, new: URL)],
+                        onProgress: (@Sendable (AgentMigrationProgress) -> Void)? = nil)
+        -> [AgentMigrationItemResult] {
+        let total = migrators.reduce(0) { $0 + $1.unitCount(moves) }
+        onProgress?(AgentMigrationProgress(completed: 0, total: total))
+        guard let onProgress else { return migrators.flatMap { $0.migrate(moves) } }
+        // @Sendable 闭包不能捕获可变局部量，用锁保护的计数器。
+        let counter = ProgressCounter()
+        var results: [AgentMigrationItemResult] = []
+        for migrator in migrators {
+            let partial = migrator.migrate(moves, onUnitComplete: {
+                onProgress(AgentMigrationProgress(completed: counter.increment(), total: total))
+            })
+            results.append(contentsOf: partial)
+        }
+        return results
+    }
+
+    /// 迁移全程在调用方线程同步执行；计数器仅防极小窗口内的并发读。
+    private final class ProgressCounter: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+        func increment() -> Int {
+            lock.lock(); defer { lock.unlock() }
+            value += 1
+            return value
+        }
     }
 
     /// 受影响路径对 = 空间根本身 + 每个直接子项（.gojo 除外），全用原始路径：

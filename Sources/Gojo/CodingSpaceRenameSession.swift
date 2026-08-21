@@ -16,4 +16,6 @@ struct CodingSpaceRenameSession: Identifiable {
     /// 重命名本身的失败信息（留在 sheet 内展示，不关窗）。
     var errorMessage: String?
     var migrating: Bool = false
+    /// 记忆转载进度；nil = 尚在改名/扫描阶段（显示不定进度）。
+    var migrationProgress: AgentMigrationProgress?
 }

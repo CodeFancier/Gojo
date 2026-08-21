@@ -154,6 +154,40 @@ final class AgentMemoryMigrationTests: XCTestCase {
         XCTAssertEqual(plan.sessions, 2)
     }
 
+    // MARK: 进度回调
+
+    func testMigrateReportsAggregatedProgress() throws {
+        let home = try TestSupport.makeTempDir()
+        let old = URL(fileURLWithPath: "/tmp/old-space")
+        let new = URL(fileURLWithPath: "/tmp/new-space")
+        // Claude 一个待迁目录 + Codex 一个命中会话 = 总 2 个单位。
+        try makeClaudeMemory(home, projectPath: old.path)
+        try makeCodexSession(home, id: "cs-1", cwd: old.path)
+
+        var updates: [AgentMigrationProgress] = []
+        let results = AgentMemoryMigrationService(home: home).migrate([(old, new)]) { p in
+            updates.append(p)
+        }
+        XCTAssertTrue(results.allSatisfy { !$0.failed })
+        XCTAssertEqual(updates.first, AgentMigrationProgress(completed: 0, total: 2),
+                       "开始即报总分母")
+        XCTAssertEqual(updates.last, AgentMigrationProgress(completed: 2, total: 2),
+                       "结束必达满值")
+        XCTAssertTrue(updates.dropFirst().allSatisfy { $0.total == 2 })
+        XCTAssertTrue(zip(updates, updates.dropFirst()).allSatisfy { $0.completed + 1 == $1.completed },
+                      "逐单位递增")
+    }
+
+    func testMigrateProgressTotalZeroWhenNothingToMigrate() throws {
+        let home = try TestSupport.makeTempDir()
+        var updates: [AgentMigrationProgress] = []
+        _ = AgentMemoryMigrationService(home: home).migrate(
+            [(URL(fileURLWithPath: "/tmp/a"), URL(fileURLWithPath: "/tmp/b"))]) { p in
+            updates.append(p)
+        }
+        XCTAssertEqual(updates, [AgentMigrationProgress(completed: 0, total: 0)])
+    }
+
     /// JSON 字符串字面量形式（JSONSerialization 输出不转义 `/`）。
     private func jsonQuoted(_ s: String) -> String { "\"\(s)\"" }
 

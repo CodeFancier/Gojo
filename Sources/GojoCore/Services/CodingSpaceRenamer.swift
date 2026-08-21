@@ -35,8 +35,9 @@ public final class CodingSpaceRenamer: @unchecked Sendable {
 
     // MARK: 执行
 
-    public func rename(_ space: URL, to rawName: String,
-                       migrateMemory: Bool) throws -> CodingSpaceRenameOutcome {
+    public func rename(_ space: URL, to rawName: String, migrateMemory: Bool,
+                       onProgress: (@Sendable (AgentMigrationProgress) -> Void)? = nil)
+        throws -> CodingSpaceRenameOutcome {
         let name = try validatedName(rawName, currentSpace: space)
         let normalized = space.standardizedFileURL
         var index = store.loadIndex()
@@ -83,16 +84,20 @@ public final class CodingSpaceRenamer: @unchecked Sendable {
         }
 
         // 4. 记忆转载：best-effort，失败项进 outcome，不回滚重命名。
-        let results = migrateMemory ? migration.migrate(moves) : []
+        let results = migrateMemory
+            ? migration.migrate(moves, onProgress: onProgress)
+            : []
         return CodingSpaceRenameOutcome(oldURL: normalized, newURL: newURL,
                                         migrationResults: results)
     }
 
     /// 转载失败后的幂等重试（重命名已完成，子项列表从新路径一侧取）。
-    public func retryMigration(from oldSpace: URL, to newSpace: URL) -> [AgentMigrationItemResult] {
+    public func retryMigration(from oldSpace: URL, to newSpace: URL,
+                               onProgress: (@Sendable (AgentMigrationProgress) -> Void)? = nil)
+        -> [AgentMigrationItemResult] {
         migration.migrate(AgentMemoryMigrationService.affectedMoves(
             oldSpace: oldSpace.standardizedFileURL,
-            newSpace: newSpace.standardizedFileURL))
+            newSpace: newSpace.standardizedFileURL), onProgress: onProgress)
     }
 
     // MARK: 私有

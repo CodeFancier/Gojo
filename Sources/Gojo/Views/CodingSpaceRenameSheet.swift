@@ -34,6 +34,7 @@ struct CodingSpaceRenameSheet: View {
                 .onSubmit { if canConfirm { state.confirmCodingSpaceRename() } }
 
             migrationSection
+            progressSection
 
             if let error = session?.errorMessage {
                 Text(error).font(.callout).foregroundStyle(Color.warmAmber)
@@ -46,15 +47,12 @@ struct CodingSpaceRenameSheet: View {
                     state.dismissCodingSpaceRename()
                 }
                 .keyboardShortcut(.cancelAction)
+                .disabled(session?.migrating == true)
                 if session?.outcome == nil {
-                    if session?.migrating == true {
-                        ProgressView().controlSize(.small).padding(.horizontal, 8)
-                    } else {
-                        Button("重命名") { state.confirmCodingSpaceRename() }
-                            .buttonStyle(.borderedProminent)
-                            .keyboardShortcut(.defaultAction)
-                            .disabled(!canConfirm)
-                    }
+                    Button("重命名") { state.confirmCodingSpaceRename() }
+                        .buttonStyle(.borderedProminent)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(!canConfirm)
                 }
             }
         }
@@ -88,6 +86,7 @@ struct CodingSpaceRenameSheet: View {
                         set: { state.setCodingSpaceRenameMigration($0) })) {
                         Text("一并转载到新路径（推荐）").font(.callout)
                     }
+                    .disabled(session?.migrating == true)
                     Text("不转载则记忆保留在原处，不再关联重命名后的空间")
                         .font(.caption)
                         .foregroundStyle(Color.textTertiary)
@@ -106,6 +105,29 @@ struct CodingSpaceRenameSheet: View {
                 Text("正在检测关联记忆…")
                     .font(.caption)
                     .foregroundStyle(Color.textTertiary)
+            }
+        }
+    }
+
+    // MARK: 执行进度
+
+    /// 改名/扫描阶段显示不定进度；记忆转载阶段显示确定进度条。
+    @ViewBuilder private var progressSection: some View {
+        if let session, session.migrating {
+            if let p = session.migrationProgress {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("正在继承记忆（\(p.completed)/\(p.total)）")
+                        .font(.callout.weight(.medium))
+                    ProgressView(value: p.fraction)
+                }
+                .padding(.vertical, 2)
+            } else {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text(session.outcome == nil ? "正在重命名…" : "正在重试转载…")
+                        .font(.caption)
+                        .foregroundStyle(Color.textTertiary)
+                }
             }
         }
     }

@@ -314,16 +314,21 @@ public final class WorkspaceManager {
 
     /// 重命名编码空间（名称=文件夹名）：移动目录、更新登记与清单名；
     /// migrateMemory 时把 agent 挂在旧路径的记忆一并转载（失败项见 outcome，
-    /// 可对 outcome 的 old/new URL 幂等重试）。
+    /// 可对 outcome 的 old/new URL 幂等重试），onProgress 逐单位回报转载进度。
     public func renameCodingSpace(at space: URL, to rawName: String,
-                                  migrateMemory: Bool) throws -> CodingSpaceRenameOutcome {
-        try renamer.rename(space, to: rawName, migrateMemory: migrateMemory)
+                                  migrateMemory: Bool,
+                                  onProgress: (@Sendable (AgentMigrationProgress) -> Void)? = nil)
+        throws -> CodingSpaceRenameOutcome {
+        try renamer.rename(space, to: rawName, migrateMemory: migrateMemory,
+                           onProgress: onProgress)
     }
 
     /// 转载失败后的幂等重试（重命名已完成）。
-    public func retryCodingSpaceMemoryMigration(from oldSpace: URL,
-                                                to newSpace: URL) -> [AgentMigrationItemResult] {
-        renamer.retryMigration(from: oldSpace, to: newSpace)
+    public func retryCodingSpaceMemoryMigration(
+        from oldSpace: URL, to newSpace: URL,
+        onProgress: (@Sendable (AgentMigrationProgress) -> Void)? = nil
+    ) -> [AgentMigrationItemResult] {
+        renamer.retryMigration(from: oldSpace, to: newSpace, onProgress: onProgress)
     }
 
     /// 从 Gojo 移除编码空间，并按选择决定是否同时清理磁盘内容。

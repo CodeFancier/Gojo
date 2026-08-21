@@ -209,10 +209,16 @@ final class AppState: ObservableObject {
         let sessionID = session.id
         codingSpaceRenameSession?.migrating = true
         let manager = self.manager
+        let onProgress: @Sendable (AgentMigrationProgress) -> Void = { [weak self] progress in
+            DispatchQueue.main.async {
+                guard let self, self.codingSpaceRenameSession?.id == sessionID else { return }
+                self.codingSpaceRenameSession?.migrationProgress = progress
+            }
+        }
         asyncQueue.async { [weak self] in
             do {
                 let outcome = try manager.renameCodingSpace(
-                    at: space, to: name, migrateMemory: migrate)
+                    at: space, to: name, migrateMemory: migrate, onProgress: onProgress)
                 DispatchQueue.main.async {
                     guard let self else { return }
                     if case .codingSpace(let u) = self.route,
@@ -244,9 +250,15 @@ final class AppState: ObservableObject {
         let sessionID = session.id
         codingSpaceRenameSession?.migrating = true
         let manager = self.manager
+        let onProgress: @Sendable (AgentMigrationProgress) -> Void = { [weak self] progress in
+            DispatchQueue.main.async {
+                guard let self, self.codingSpaceRenameSession?.id == sessionID else { return }
+                self.codingSpaceRenameSession?.migrationProgress = progress
+            }
+        }
         asyncQueue.async { [weak self] in
             let results = manager.retryCodingSpaceMemoryMigration(
-                from: outcome.oldURL, to: outcome.newURL)
+                from: outcome.oldURL, to: outcome.newURL, onProgress: onProgress)
             DispatchQueue.main.async {
                 guard let self, self.codingSpaceRenameSession?.id == sessionID else { return }
                 self.codingSpaceRenameSession?.migrating = false
