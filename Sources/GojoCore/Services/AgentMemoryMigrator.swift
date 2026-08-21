@@ -62,17 +62,36 @@ public struct ClaudeMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
 
     public func plan(_ moves: [(old: URL, new: URL)]) -> AgentMigrationPlan {
         var docs = 0, sessions = 0
+        var safeDocs = 0, safeSessions = 0
         for (old, new) in moves where old.path != new.path {
             let dir = projectDir(for: old.path)
-            guard fm.fileExists(atPath: dir.path) else { continue }
-            // 记忆文档在 memory/ 子目录；会话 jsonl 在顶层。
-            let items = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
-            sessions += items.filter { $0.pathExtension.lowercased() == "jsonl" }.count
-            let memoryDir = dir.appendingPathComponent("memory", isDirectory: true)
-            let mdFiles = (try? fm.contentsOfDirectory(at: memoryDir, includingPropertiesForKeys: nil)) ?? []
-            docs += mdFiles.filter { $0.pathExtension.lowercased() == "md" }.count
+            if fm.fileExists(atPath: dir.path) {
+                let c = counts(in: dir)
+                docs += c.docs; sessions += c.sessions
+            }
+            // 软链成员：agent 以 getcwd() 物理路径建目录，真实路径的记忆
+            // 不随空间改名变化——计入 unaffected 供 UI 说明，不参与迁移。
+            let resolved = old.resolvingSymlinksInPath().path
+            if resolved != old.path {
+                let realDir = projectDir(for: resolved)
+                if fm.fileExists(atPath: realDir.path) {
+                    let c = counts(in: realDir)
+                    safeDocs += c.docs; safeSessions += c.sessions
+                }
+            }
         }
-        return AgentMigrationPlan(memoryDocs: docs, sessions: sessions)
+        return AgentMigrationPlan(memoryDocs: docs, sessions: sessions,
+                                  unaffectedDocs: safeDocs,
+                                  unaffectedSessions: safeSessions)
+    }
+
+    /// 记忆文档在 memory/ 子目录；会话 jsonl 在顶层。
+    private func counts(in dir: URL) -> (docs: Int, sessions: Int) {
+        let items = (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? []
+        let sessions = items.filter { $0.pathExtension.lowercased() == "jsonl" }.count
+        let memoryDir = dir.appendingPathComponent("memory", isDirectory: true)
+        let mdFiles = (try? fm.contentsOfDirectory(at: memoryDir, includingPropertiesForKeys: nil)) ?? []
+        return (mdFiles.filter { $0.pathExtension.lowercased() == "md" }.count, sessions)
     }
 
     public func unitCount(_ moves: [(old: URL, new: URL)]) -> Int {
@@ -177,12 +196,20 @@ public struct CodexMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
 
     public func plan(_ moves: [(old: URL, new: URL)]) -> AgentMigrationPlan {
         let map = Self.pathMap(moves)
-        guard !map.isEmpty else { return .empty }
+        let resolved = Self.resolvedPathSet(moves)
+        guard !map.isEmpty || !resolved.isEmpty else { return .empty }
         var sessions = 0
+        var unaffected = 0
         for file in sessionFiles() {
-            if let cwd = firstSessionCWD(of: file), map[cwd] != nil { sessions += 1 }
+            guard let cwd = firstSessionCWD(of: file) else { continue }
+            if map[cwd] != nil {
+                sessions += 1
+            } else if resolved.contains(cwd) {
+                // cwd 是软链成员的物理路径：不随空间改名变化，无需转载。
+                unaffected += 1
+            }
         }
-        return AgentMigrationPlan(sessions: sessions)
+        return AgentMigrationPlan(sessions: sessions, unaffectedSessions: unaffected)
     }
 
     public func unitCount(_ moves: [(old: URL, new: URL)]) -> Int {
@@ -218,6 +245,17 @@ public struct CodexMemoryMigrator: @unchecked Sendable, AgentMemoryMigrator {
         var map: [String: String] = [:]
         for (old, new) in moves where old.path != new.path { map[old.path] = new.path }
         return map
+    }
+
+    /// 软链成员的物理路径集合（与原始路径相同的变体不算），仅用于 plan 说明，
+    /// 绝不进入 migrate 的改写表——真实路径的会话属于公共库项目本身。
+    static func resolvedPathSet(_ moves: [(old: URL, new: URL)]) -> Set<String> {
+        var set = Set<String>()
+        for (old, new) in moves where old.path != new.path {
+            let resolved = old.resolvingSymlinksInPath().path
+            if resolved != old.path { set.insert(resolved) }
+        }
+        return set
     }
 
     /// 只读首行 session_meta 的 cwd（判归属足够；Codex 恒首行）。

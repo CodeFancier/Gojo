@@ -79,6 +79,9 @@ struct CodingSpaceRenameSheet: View {
                                   systemImage: "chevron.left.forwardslash.chevron.right")
                                 .foregroundStyle(Color.lightBlue)
                         }
+                        if plan.hasUnaffectedMemory {
+                            unaffectedNote(plan)
+                        }
                     }
                     .font(.callout)
                     Toggle(isOn: Binding(
@@ -94,6 +97,14 @@ struct CodingSpaceRenameSheet: View {
                 .padding(12)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.surface))
+            } else if plan.hasUnaffectedMemory {
+                // 会话/记忆挂在软链成员的真实路径（公共库）下：右侧总览按钮看得到，
+                // 但真实路径不随空间改名变化，无需转载——说明白而不是笼统说「没有」。
+                unaffectedNote(plan)
+                    .font(.callout)
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Color.surface))
             } else {
                 Text("未检测到旧路径下的 Claude / Codex 记忆")
                     .font(.caption)
@@ -107,6 +118,17 @@ struct CodingSpaceRenameSheet: View {
                     .foregroundStyle(Color.textTertiary)
             }
         }
+    }
+
+    /// 「挂在真实路径、不受影响」的说明行。
+    private func unaffectedNote(_ plan: CodingSpaceRenamePlan) -> some View {
+        let s = plan.unaffectedSummary
+        var parts: [String] = []
+        if s.docs > 0 { parts.append("\(s.docs) 篇记忆") }
+        if s.sessions > 0 { parts.append("\(s.sessions) 个会话") }
+        return Label("另有 \(parts.joined(separator: " · ")) 挂在成员真实路径（公共库）下，不受重命名影响，无需转载",
+                     systemImage: "link")
+            .foregroundStyle(Color.textSecondary)
     }
 
     // MARK: 执行进度

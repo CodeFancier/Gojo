@@ -154,6 +154,46 @@ final class AgentMemoryMigrationTests: XCTestCase {
         XCTAssertEqual(plan.sessions, 2)
     }
 
+    // MARK: 软链成员的真实路径记忆（不受改名影响）
+
+    /// agent 用 getcwd() 记 cwd，软链被解析成物理路径——软链成员的会话/记忆
+    /// 挂在真实路径下：右侧总览按钮（双变体）看得到，改名 plan 必须把它归入
+    /// 「不受影响」而非漏检，且 migrate 绝不改写真实路径的会话。
+    func testPlanSeparatesUnaffectedSymlinkMemberMemory() throws {
+        let home = try TestSupport.makeTempDir()
+        let sandbox = try TestSupport.makeTempDir()
+        let real = sandbox.appendingPathComponent("public/lib", isDirectory: true)
+        try fm.createDirectory(at: real, withIntermediateDirectories: true)
+        let oldSpace = sandbox.appendingPathComponent("spaces/Old", isDirectory: true)
+        try fm.createDirectory(at: oldSpace, withIntermediateDirectories: true)
+        let link = oldSpace.appendingPathComponent("lib")
+        try fm.createSymbolicLink(at: link, withDestinationURL: real)
+
+        try makeClaudeMemory(home, projectPath: real.path)
+        let file = try makeCodexSession(home, id: "cs-1", cwd: real.path)
+        let fileBefore = try String(contentsOf: file, encoding: .utf8)
+
+        let moves = [(old: link, new: sandbox.appendingPathComponent("spaces/New/lib"))]
+
+        let codexPlan = CodexMemoryMigrator(home: home).plan(moves)
+        XCTAssertEqual(codexPlan.sessions, 0, "软链原始路径无会话，无需转载")
+        XCTAssertEqual(codexPlan.unaffectedSessions, 1, "真实路径会话计入不受影响")
+
+        let claudePlan = ClaudeMemoryMigrator(home: home).plan(moves)
+        XCTAssertTrue(claudePlan.isEmpty)
+        XCTAssertEqual(claudePlan.unaffectedDocs, 1)
+        XCTAssertEqual(claudePlan.unaffectedSessions, 1)
+
+        _ = CodexMemoryMigrator(home: home).migrate(moves)
+        XCTAssertEqual(try String(contentsOf: file, encoding: .utf8), fileBefore,
+                       "真实路径的会话属于公共库项目本身，绝不改写")
+
+        // 总览（双变体口径）依然读得到，与右侧按钮一致。
+        let reader = AgentMemoryReader(home: home)
+        XCTAssertEqual(reader.snapshot(for: .codex, projectPath: link).sessions.count, 1)
+        XCTAssertEqual(reader.snapshot(for: .claude, projectPath: link).memoryDocs.count, 1)
+    }
+
     // MARK: 进度回调
 
     func testMigrateReportsAggregatedProgress() throws {
