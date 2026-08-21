@@ -15,6 +15,7 @@ final class AppState: ObservableObject {
     @Published var codingSpaceDeletionSession: CodingSpaceDeletionSession?
     @Published var workspaceScanSession: WorkspaceScanSession?
     @Published var codingSpaceNamingSession: CodingSpaceNamingSession?
+    @Published var codingSpaceRenameSession: CodingSpaceRenameSession?
 
     let manager: WorkspaceManager
     let store: ConfigStore
@@ -161,6 +162,98 @@ final class AppState: ObservableObject {
     }
     func dismissCodingSpaceNaming() { codingSpaceNamingSession = nil }
     func setCodingSpaceName(_ name: String) { codingSpaceNamingSession?.name = name }
+
+    // MARK: 编码空间重命名
+
+    /// 打开重命名 sheet 并后台 dry-run 转载计划（计数只依赖旧路径侧，
+    /// 打开后改名无需重算）。
+    func startCodingSpaceRename(_ space: URL) {
+        let session = CodingSpaceRenameSession(
+            space: space,
+            currentName: space.lastPathComponent,
+            name: space.lastPathComponent)
+        codingSpaceRenameSession = session
+        let sessionID = session.id
+        let manager = self.manager
+        asyncQueue.async { [weak self] in
+            let plan = try? manager.planCodingSpaceRename(at: space, to: session.name)
+            DispatchQueue.main.async {
+                guard let self, self.codingSpaceRenameSession?.id == sessionID else { return }
+                self.codingSpaceRenameSession?.plan = plan
+            }
+        }
+    }
+
+    func setCodingSpaceRenameName(_ name: String) {
+        codingSpaceRenameSession?.name = name
+    }
+
+    func setCodingSpaceRenameMigration(_ on: Bool) {
+        codingSpaceRenameSession?.migrateMemory = on
+    }
+
+    func dismissCodingSpaceRename() {
+        guard codingSpaceRenameSession?.migrating != true else { return }
+        codingSpaceRenameSession = nil
+    }
+
+    /// 确认重命名：改目录 + 更新登记；迁移全部成功直接关窗，有失败项留在
+    /// 窗内供重试。当前在该空间内时路由跟随新路径。
+    func confirmCodingSpaceRename() {
+        guard let session, !session.migrating, session.outcome == nil else { return }
+        let name = WorkspaceManager.sanitizedFolderName(session.name)
+        guard !name.isEmpty, name != session.currentName else { return }
+        let migrate = session.migrateMemory
+        let space = session.space
+        let sessionID = session.id
+        codingSpaceRenameSession?.migrating = true
+        let manager = self.manager
+        asyncQueue.async { [weak self] in
+            do {
+                let outcome = try manager.renameCodingSpace(
+                    at: space, to: name, migrateMemory: migrate)
+                DispatchQueue.main.async {
+                    guard let self else { return }
+                    if case .codingSpace(let u) = self.route,
+                       u.standardizedFileURL.path == outcome.oldURL.path {
+                        self.route = .codingSpace(outcome.newURL)
+                    }
+                    if outcome.migrationFailures.isEmpty {
+                        self.codingSpaceRenameSession = nil
+                    } else if self.codingSpaceRenameSession?.id == sessionID {
+                        self.codingSpaceRenameSession?.migrating = false
+                        self.codingSpaceRenameSession?.outcome = outcome
+                    }
+                    self.reload()
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    guard let self, self.codingSpaceRenameSession?.id == sessionID else { return }
+                    self.codingSpaceRenameSession?.migrating = false
+                    self.codingSpaceRenameSession?.errorMessage = "\(error)"
+                }
+            }
+        }
+    }
+
+    /// 转载失败后的幂等重试（重命名已完成）。
+    func retryCodingSpaceMemoryMigration() {
+        guard let session, let outcome = session.outcome, !session.migrating else { return }
+        let sessionID = session.id
+        codingSpaceRenameSession?.migrating = true
+        let manager = self.manager
+        asyncQueue.async { [weak self] in
+            let results = manager.retryCodingSpaceMemoryMigration(
+                from: outcome.oldURL, to: outcome.newURL)
+            DispatchQueue.main.async {
+                guard let self, self.codingSpaceRenameSession?.id == sessionID else { return }
+                self.codingSpaceRenameSession?.migrating = false
+                self.codingSpaceRenameSession?.outcome = CodingSpaceRenameOutcome(
+                    oldURL: outcome.oldURL, newURL: outcome.newURL,
+                    migrationResults: results)
+            }
+        }
+    }
     func removeCodingSpace(_ space: URL, mode: CodingSpaceRemovalMode) {
         let manager = self.manager
         runAsync(space: space, folder: "__coding_space__") {
@@ -339,6 +432,16 @@ final class AppState: ObservableObject {
         asyncQueue.async {
             let snap = reader.snapshot(for: kind, projectPath: projectURL)
             DispatchQueue.main.async { completion(snap) }
+        }
+    }
+
+    /// 后台读取空间级记忆总览（空间根 + 各成员的两 agent 计数），读完回主线程。
+    func loadSpaceMemorySummary(_ space: URL,
+                                completion: @escaping (SpaceMemorySummary?) -> Void) {
+        let reader = memoryReader
+        asyncQueue.async {
+            let summary = reader.spaceMemorySummary(in: space)
+            DispatchQueue.main.async { completion(summary) }
         }
     }
 

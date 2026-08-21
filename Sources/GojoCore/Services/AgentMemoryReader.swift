@@ -162,6 +162,68 @@ public struct AgentMemoryReader: @unchecked Sendable {
         return (id, (title.map(oneLine)) ?? id)
     }
 
+    // MARK: 空间总览
+
+    /// 空间根本身 + 每个直接子项的两 agent 记忆计数（entries[0] 恒为空间根）。
+    /// 只列目录计数、不读全文；Codex 一次枚举建 cwd → 会话数表，
+    /// 再按各路径变体（原始 / 软链解析）匹配。
+    public func spaceMemorySummary(in codingSpace: URL) -> SpaceMemorySummary {
+        let codexRoot = home.appendingPathComponent(".codex/sessions", isDirectory: true)
+        let codexAvailable = fm.fileExists(atPath: codexRoot.path)
+        var codexByCWD: [String: Int] = [:]
+        if codexAvailable,
+           let en = fm.enumerator(at: codexRoot, includingPropertiesForKeys: nil) {
+            for case let f as URL in en where f.pathExtension.lowercased() == "jsonl" {
+                if let cwd = CodexSessionFile.firstSessionCWD(of: f) {
+                    codexByCWD[cwd, default: 0] += 1
+                }
+            }
+        }
+
+        func entry(_ url: URL, folderName: String?) -> MemberMemorySummary {
+            // 软链成员两个路径变体都可能挂过会话（用户从软链或真实路径进入）。
+            let variants: Set<String> = [url.path, url.resolvingSymlinksInPath().path]
+            let sessions = variants.reduce(0) { $0 + (codexByCWD[$1] ?? 0) }
+            return MemberMemorySummary(
+                folderName: folderName,
+                path: url.path,
+                claude: claudeCount(for: url),
+                codex: AgentMemoryCount(available: codexAvailable, sessions: sessions))
+        }
+
+        /// Claude：原始或解析路径的编码目录任一存在即 available。
+        func claudeCount(for url: URL) -> AgentMemoryCount {
+            guard let dir = claudeProjectDir(for: url) else { return .unavailable }
+            let mdFiles = (try? fm.contentsOfDirectory(
+                at: dir.appendingPathComponent("memory", isDirectory: true),
+                includingPropertiesForKeys: nil)) ?? []
+            let topFiles = (try? fm.contentsOfDirectory(
+                at: dir, includingPropertiesForKeys: nil)) ?? []
+            return AgentMemoryCount(
+                available: true,
+                memoryDocs: mdFiles.filter { $0.pathExtension.lowercased() == "md" }.count,
+                sessions: topFiles.filter { $0.pathExtension.lowercased() == "jsonl" }.count)
+        }
+
+        var entries = [entry(codingSpace, folderName: nil)]
+        let children = (try? fm.contentsOfDirectory(
+            at: codingSpace, includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles])) ?? []
+        for child in children where child.lastPathComponent != ".gojo" {
+            entries.append(entry(child, folderName: child.lastPathComponent))
+        }
+        return SpaceMemorySummary(entries: entries)
+    }
+
+    /// Claude 项目记忆目录定位（原始路径优先，软链解析路径兜底），不存在返回 nil。
+    private func claudeProjectDir(for url: URL) -> URL? {
+        let root = home.appendingPathComponent(".claude/projects", isDirectory: true)
+        let candidates = [url.path, url.resolvingSymlinksInPath().path]
+        return candidates
+            .map { root.appendingPathComponent(Self.claudeProjectDirName(for: $0), isDirectory: true) }
+            .first { fm.fileExists(atPath: $0.path) }
+    }
+
     // MARK: 文本工具
 
     /// 过滤注入内容（<...> 标签、AGENTS.md 前言）与空白，返回可读候选。

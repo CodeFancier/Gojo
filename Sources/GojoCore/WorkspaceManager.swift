@@ -15,12 +15,15 @@ public enum WorkspaceError: Error, Equatable {
     case codingSpaceNotFound(String)
     case codingSpaceFolderMissing(String)
     case unsafeCodingSpacePath(String)
+    case invalidCodingSpaceName
+    case codingSpaceNameCollision(String)
 }
 
 public final class WorkspaceManager {
     private let store: ConfigStore
     private let git: GitService
     private let symlink: SymlinkService
+    private let renamer: CodingSpaceRenamer
     private let fm = FileManager.default
 
     public init(configStore: ConfigStore,
@@ -29,6 +32,7 @@ public final class WorkspaceManager {
         self.store = configStore
         self.git = git
         self.symlink = symlink
+        self.renamer = CodingSpaceRenamer(configStore: configStore)
     }
 
     // MARK: - 公共空间
@@ -298,6 +302,28 @@ public final class WorkspaceManager {
 
     public func codingSpaceURLs() -> [URL] {
         store.loadIndex().codingSpacePaths.map(URL.init(fileURLWithPath:))
+    }
+
+    // MARK: - 编码空间重命名
+
+    /// 重命名 dry-run：清洗名称、算新 URL、统计旧路径下要转载的 agent 记忆。
+    public func planCodingSpaceRename(at space: URL,
+                                      to rawName: String) throws -> CodingSpaceRenamePlan {
+        try renamer.planRename(of: space, to: rawName)
+    }
+
+    /// 重命名编码空间（名称=文件夹名）：移动目录、更新登记与清单名；
+    /// migrateMemory 时把 agent 挂在旧路径的记忆一并转载（失败项见 outcome，
+    /// 可对 outcome 的 old/new URL 幂等重试）。
+    public func renameCodingSpace(at space: URL, to rawName: String,
+                                  migrateMemory: Bool) throws -> CodingSpaceRenameOutcome {
+        try renamer.rename(space, to: rawName, migrateMemory: migrateMemory)
+    }
+
+    /// 转载失败后的幂等重试（重命名已完成）。
+    public func retryCodingSpaceMemoryMigration(from oldSpace: URL,
+                                                to newSpace: URL) -> [AgentMigrationItemResult] {
+        renamer.retryMigration(from: oldSpace, to: newSpace)
     }
 
     /// 从 Gojo 移除编码空间，并按选择决定是否同时清理磁盘内容。

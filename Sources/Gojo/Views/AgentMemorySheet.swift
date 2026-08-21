@@ -229,3 +229,103 @@ struct AgentMemoryButtons: View {
         .buttonStyle(.borderless).help(help)
     }
 }
+
+// MARK: - 空间记忆总览入口
+
+/// 空间级记忆关联总览：Claude / Codex 各一个带计数的胶囊菜单，按成员列出
+/// 记忆与会话数，选中行打开该路径的记忆大窗（首行为空间根本身）。
+struct SpaceMemoryMenu: View {
+    @EnvironmentObject var state: AppState
+    let space: URL
+    let displayName: String
+
+    @State private var summary: SpaceMemorySummary?
+    @State private var target: MemoryTarget?
+
+    private struct MemoryTarget: Identifiable {
+        let id = UUID()
+        let projectURL: URL
+        let displayName: String
+        let kind: AgentKind
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            menu(.claude, "brain.head.profile", Color.warmAmber, "Claude 记忆")
+            menu(.codex, "chevron.left.forwardslash.chevron.right", Color.lightBlue, "Codex 会话")
+        }
+        .onAppear {
+            state.loadSpaceMemorySummary(space) { summary = $0 }
+        }
+        .sheet(item: $target) { t in
+            AgentMemorySheet(projectURL: t.projectURL,
+                             displayName: t.displayName, kind: t.kind)
+                .environmentObject(state)
+        }
+    }
+
+    @ViewBuilder
+    private func menu(_ kind: AgentKind, _ symbol: String,
+                      _ tint: Color, _ help: String) -> some View {
+        Menu {
+            let rows = entries(for: kind)
+            if rows.isEmpty {
+                Text(kind == .claude ? "还没在这个空间用过 Claude"
+                                     : "还没在这个空间用过 Codex")
+            } else {
+                ForEach(rows) { row in
+                    Button("\(row.displayName)（\(detail(row, kind: kind))）") {
+                        target = MemoryTarget(
+                            projectURL: URL(fileURLWithPath: row.path),
+                            displayName: row.displayName,
+                            kind: kind)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: symbol).font(.system(size: 11, weight: .medium))
+                Text(kind == .claude ? "Claude" : "Codex")
+                    .font(.system(size: 11, weight: .medium))
+                if let total = totalLabel(for: kind) {
+                    Text(total).font(.system(size: 11, weight: .semibold)).opacity(0.75)
+                }
+            }
+            .foregroundStyle(tint)
+            .padding(.horizontal, 9).padding(.vertical, 5)
+            .background(Capsule().fill(tint.opacity(0.14)))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(help)
+    }
+
+    /// 该 agent 在此空间有内容的条目（Claude 看记忆目录是否存在，Codex 看会话数）。
+    private func entries(for kind: AgentKind) -> [MemberMemorySummary] {
+        guard let summary else { return [] }
+        return summary.entries.filter {
+            kind == .claude ? $0.claude.available : $0.codex.sessions > 0
+        }
+    }
+
+    private func detail(_ row: MemberMemorySummary, kind: AgentKind) -> String {
+        if kind == .claude {
+            return row.claude.memoryDocs > 0
+                ? "\(row.claude.memoryDocs) 篇 · \(row.claude.sessions) 会话"
+                : "\(row.claude.sessions) 会话"
+        }
+        return "\(row.codex.sessions) 会话"
+    }
+
+    private func totalLabel(for kind: AgentKind) -> String? {
+        guard let summary else { return nil }
+        if kind == .claude {
+            let docs = summary.entries.reduce(0) { $0 + $1.claude.memoryDocs }
+            let sessions = summary.entries.reduce(0) { $0 + $1.claude.sessions }
+            return docs + sessions > 0 ? "\(docs + sessions)" : nil
+        }
+        let sessions = summary.entries.reduce(0) { $0 + $1.codex.sessions }
+        return sessions > 0 ? "\(sessions)" : nil
+    }
+}

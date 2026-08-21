@@ -62,6 +62,9 @@ struct ContentView: View {
         .sheet(item: $state.codingSpaceNamingSession) { _ in
             CodingSpaceNamingSheet()
         }
+        .sheet(item: $state.codingSpaceRenameSession) { _ in
+            CodingSpaceRenameSheet()
+        }
     }
 
     @ViewBuilder private var routedLayout: some View {

@@ -15,7 +15,8 @@ struct CodingSpaceDomain: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            DomainTopBar(title: space.lastPathComponent, memoryURL: space)
+            DomainTopBar(title: space.lastPathComponent, memoryURL: space,
+                         onRename: { state.startCodingSpaceRename(space) })
 
             ScrollView {
                 let members = state.members(in: space)
@@ -51,8 +52,10 @@ struct DomainTopBar: View {
     @EnvironmentObject var state: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let title: String
-    /// 传入则在顶栏显示该目录（编码空间根）的 Claude/Codex 记忆入口。
+    /// 传入则在顶栏显示该目录（编码空间根）的 Claude/Codex 记忆总览入口。
     var memoryURL: URL? = nil
+    /// 传入则在标题旁显示重命名按钮（编码空间）。
+    var onRename: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -63,10 +66,21 @@ struct DomainTopBar: View {
             }
             .buttonStyle(.borderless).keyboardShortcut("[", modifiers: .command)
 
-            Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+            HStack(spacing: 6) {
+                Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                if let onRename {
+                    Button(action: onRename) {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Color.textTertiary)
+                    }
+                    .buttonStyle(.borderless)
+                    .help("重命名编码空间（可一并转载助手记忆）")
+                }
+            }
             Spacer()
             if let url = memoryURL {
-                AgentMemoryButtons(projectURL: url, displayName: title, compact: false)
+                SpaceMemoryMenu(space: url, displayName: title)
             }
             ToolbarButtons()
         }
